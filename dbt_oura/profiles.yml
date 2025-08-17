@@ -1,0 +1,8 @@
+dbt_oura:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ./data/oura.duckdb
+      threads: 4
+      schema: oura_marts

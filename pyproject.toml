@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "oura-pipeline"
+version = "0.1.0"
+description = "Dagster + DuckDB + dbt pipeline pulling Oura data"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "dagster>=1.7",
+  "dagster-webserver>=1.7",
+  "polars>=0.20",
+  "duckdb>=1.0",
+  "requests>=2.31",
+  "python-dotenv>=1.0",
+  "dotenv>=0.9.9",
+  "pathlib>=1.0.1",
+  "pyarrow>=21.0.0",
+  "pandas>=2.3.1",
+]
+
+[project.optional-dependencies]
+dbt = ["dbt-core>=1.7", "dbt-duckdb>=1.7"]
+dev = ["pytest>=7.4", "ruff>=0.4", "mypy>=1.8", "ipykernel>=6.29"]
+
+[tool.hatch.build.targets.wheel]
+# src-layout: include both packages in the wheel
+packages = ["src/oura_client", "src/dagster_project"]
+
+[tool.dagster]
+module_name = "dagster_project.definitions"

@@ -1,0 +1,7 @@
+name: "dbt_oura"
+version: "1.0.0"
+profile: "dbt_oura"
+model-paths: ["models"]
+models:
+  dbt_oura:
+    +materialized: view

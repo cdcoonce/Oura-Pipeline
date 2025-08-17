@@ -1,24 +1,21 @@
+
 import dagster as dg
-from .defs.assets import (
-    oura_sleep_raw, oura_readiness_raw, oura_activity_raw, oura_heartrate_raw, load_into_duckdb
-)
-from .defs.resources import oura_client, duckdb_conn, data_dir
+from .defs import assets
+from .defs.resources import OuraAPI, DuckDBResource
 
-assets = [oura_sleep_raw, oura_readiness_raw, oura_activity_raw, oura_heartrate_raw, load_into_duckdb]
-
-daily_job = dg.define_asset_job("daily_oura_job", selection=[a.key for a in assets])
-
-schedule = dg.ScheduleDefinition(
-    job=daily_job,
-    cron_schedule="0 9 * * *",  # 9:00 AM Phoenix
-)
-
-defs = dg.Definitions(
-    assets=assets,
-    resources={
-        "oura_client": oura_client,      # key used above
-        "duckdb_conn": duckdb_conn,      # key used in load_into_duckdb
-        "data_dir": data_dir,            # key used above
-    },
-    schedules=[schedule],
-)
+@dg.definitions
+def defs():
+    return dg.Definitions(
+        assets=dg.load_assets_from_modules([assets]),
+        resources={
+            "oura_api": OuraAPI(
+                client_id=dg.EnvVar("OURA_CLIENT_ID"),
+                client_secret=dg.EnvVar("OURA_CLIENT_SECRET"),
+                token_path=dg.EnvVar("OURA_TOKEN_PATH"),
+            ),
+            "duckdb": DuckDBResource(
+                db_path=dg.EnvVar("DUCKDB_PATH"),
+            ),
+        },
+        executor=dg.in_process_executor
+    )

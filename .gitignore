@@ -216,3 +216,6 @@ data/tokens/*.json
 
 # raw data files
 data/raw/*.parquet
+
+# Dagster files
+.tmp*

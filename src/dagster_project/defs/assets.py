@@ -1,88 +1,244 @@
-# src/dagster_project/defs/assets.py
-import dagster as dg, polars as pl
+import dagster as dg
+import polars as pl
 from datetime import datetime
-from pathlib import Path
+from typing import Iterable, Dict, Any
+from .resources import OuraAPI, DuckDBResource
 
 partitions = dg.DailyPartitionsDefinition(start_date="2024-01-01")
 
-def _dates(ctx):
-    d = datetime.fromisoformat(ctx.partition_key).date()
-    return d, d
 
-@dg.asset(partitions_def=partitions, group_name="oura_raw", required_resource_keys={"oura_client", "data_dir"})
-def oura_sleep_raw(context: dg.AssetExecutionContext):
-    client = context.resources.oura_client
-    data_dir: Path = context.resources.data_dir
-    start, end = _dates(context)
-    rows = list(client.fetch_daily("sleep", start, end))
-    path = data_dir / f"sleep_{start}.parquet"
-    (pl.from_dicts(rows) if rows else pl.DataFrame()).write_parquet(path)
-    return str(path)
+def _day(context: dg.AssetExecutionContext):
+    return datetime.fromisoformat(context.partition_key).date()
 
-@dg.asset(partitions_def=partitions, group_name="oura_raw", required_resource_keys={"oura_client", "data_dir"})
-def oura_readiness_raw(context: dg.AssetExecutionContext):
-    client = context.resources.oura_client
-    data_dir: Path = context.resources.data_dir
-    start, end = _dates(context)
-    rows = list(client.fetch_daily("readiness", start, end))
-    path = data_dir / f"readiness_{start}.parquet"
-    (pl.from_dicts(rows) if rows else pl.DataFrame()).write_parquet(path)
-    return str(path)
 
-@dg.asset(partitions_def=partitions, group_name="oura_raw", required_resource_keys={"oura_client", "data_dir"})
-def oura_activity_raw(context: dg.AssetExecutionContext):
-    client = context.resources.oura_client
-    data_dir: Path = context.resources.data_dir
-    start, end = _dates(context)
-    rows = list(client.fetch_daily("activity", start, end))
-    path = data_dir / f"activity_{start}.parquet"
-    (pl.from_dicts(rows) if rows else pl.DataFrame()).write_parquet(path)
-    return str(path)
+def _upsert_day(con, table: str, rows: Iterable[Dict[str, Any]], day) -> int:
+    """
+    Idempotent load into oura_raw.<table> using a synthetic partition_date column.
+    Deletes existing rows for that day, then inserts fresh.
+    """
+    df = pl.from_dicts(list(rows)) if rows else pl.DataFrame()
+    # Ensure table exists
+    con.execute("CREATE SCHEMA IF NOT EXISTS oura_raw;")
+    if df.is_empty():
+        con.execute(f"CREATE TABLE IF NOT EXISTS oura_raw.{table} (partition_date DATE)")
+        return 0
+    if "partition_date" not in df.columns:
+        df = df.with_columns(pl.lit(str(day)).str.strptime(pl.Date, strict=False).alias("partition_date"))
+    con.register("tmp_df", df.to_arrow())
+    con.execute(f"CREATE TABLE IF NOT EXISTS oura_raw.{table} AS SELECT * FROM tmp_df WHERE 1=0;")
+    con.execute(f"DELETE FROM oura_raw.{table} WHERE partition_date = ?", [day])
+    con.execute(f"INSERT INTO oura_raw.{table} SELECT * FROM tmp_df;")
+    con.unregister("tmp_df")
+    return df.height
 
-@dg.asset(partitions_def=partitions, group_name="oura_raw", required_resource_keys={"oura_client", "data_dir"})
-def oura_heartrate_raw(context: dg.AssetExecutionContext):
-    client = context.resources.oura_client
-    data_dir: Path = context.resources.data_dir
-    start, end = _dates(context)
-    rows = list(client.fetch_heartrate(start, end))
-    path = data_dir / f"heartrate_{start}.parquet"
-    (pl.from_dicts(rows) if rows else pl.DataFrame()).write_parquet(path)
-    return str(path)
+
+# ---------- DAILY SUMMARY ASSETS ----------
 
 @dg.asset(
+    name="oura_sleep_raw",
     partitions_def=partitions,
-    deps=[oura_sleep_raw, oura_readiness_raw, oura_activity_raw, oura_heartrate_raw],
-    group_name="staging",
-    required_resource_keys={"duckdb_conn", "data_dir"},
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
 )
-def load_into_duckdb(context: dg.AssetExecutionContext):
-    duckdb_conn = context.resources.duckdb_conn
-    data_dir: Path = context.resources.data_dir
-    import polars as pl
+def oura_sleep_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_daily("sleep", day, day)
+    n = _upsert_day(con, "sleep", rows, day)
+    return f"sleep:{day} rows={n}"
 
-    # Build paths for the SAME partition key
-    day = datetime.fromisoformat(context.partition_key).date()
-    paths = {
-        "sleep":     data_dir / f"sleep_{day}.parquet",
-        "readiness": data_dir / f"readiness_{day}.parquet",
-        "activity":  data_dir / f"activity_{day}.parquet",
-        "heartrate": data_dir / f"heartrate_{day}.parquet",
-    }
 
-    def append(path: Path, table: str):
-        if not path.exists():
-            return
-        df = pl.read_parquet(path)
-        if df.is_empty():
-            return
-        duckdb_conn.register("tmp_df", df.to_pandas())
-        duckdb_conn.execute(f"CREATE TABLE IF NOT EXISTS oura_raw.{table} AS SELECT * FROM tmp_df WHERE 1=0;")
-        duckdb_conn.execute(f"INSERT INTO oura_raw.{table} SELECT * FROM tmp_df;")
-        duckdb_conn.unregister("tmp_df")
+@dg.asset(
+    name="oura_activity_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_activity_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_daily("activity", day, day)
+    n = _upsert_day(con, "activity", rows, day)
+    return f"activity:{day} rows={n}"
 
-    append(paths["sleep"], "sleep")
-    append(paths["readiness"], "readiness")
-    append(paths["activity"], "activity")
-    append(paths["heartrate"], "heartrate")
 
-    return "loaded"
+@dg.asset(
+    name="oura_readiness_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_readiness_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_daily("readiness", day, day)
+    n = _upsert_day(con, "readiness", rows, day)
+    return f"readiness:{day} rows={n}"
+
+
+@dg.asset(
+    name="oura_spo2_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_spo2_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_daily("spo2", day, day)
+    n = _upsert_day(con, "spo2", rows, day)
+    return f"spo2:{day} rows={n}"
+
+
+@dg.asset(
+    name="oura_stress_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_stress_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_daily("stress", day, day)
+    n = _upsert_day(con, "stress", rows, day)
+    return f"stress:{day} rows={n}"
+
+
+@dg.asset(
+    name="oura_resilience_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_resilience_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_daily("resilience", day, day)
+    n = _upsert_day(con, "resilience", rows, day)
+    return f"resilience:{day} rows={n}"
+
+
+# ---------- GRANULAR / EVENT-LEVEL ASSETS ----------
+
+@dg.asset(
+    name="oura_heartrate_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_heartrate_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_heartrate(day, day)
+    n = _upsert_day(con, "heartrate", rows, day)
+    return f"heartrate:{day} rows={n}"
+
+
+@dg.asset(
+    name="oura_sleep_periods_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_sleep_periods_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_sleep_periods(day, day)
+    n = _upsert_day(con, "sleep_periods", rows, day)
+    return f"sleep_periods:{day} rows={n}"
+
+
+@dg.asset(
+    name="oura_sleep_time_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_sleep_time_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_sleep_time(day, day)
+    n = _upsert_day(con, "sleep_time", rows, day)
+    return f"sleep_time:{day} rows={n}"
+
+
+@dg.asset(
+    name="oura_workouts_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_workouts_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_workouts(day, day)
+    n = _upsert_day(con, "workouts", rows, day)
+    return f"workouts:{day} rows={n}"
+
+
+@dg.asset(
+    name="oura_sessions_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_sessions_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_sessions(day, day)
+    n = _upsert_day(con, "sessions", rows, day)
+    return f"sessions:{day} rows={n}"
+
+
+@dg.asset(
+    name="oura_tags_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_tags_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_tags(day, day)
+    n = _upsert_day(con, "tags", rows, day)
+    return f"tags:{day} rows={n}"
+
+
+@dg.asset(
+    name="oura_rest_mode_periods_raw",
+    partitions_def=partitions,
+    group_name="oura_raw",
+    required_resource_keys={"oura_api", "duckdb"},
+)
+def oura_rest_mode_periods_raw(context: dg.AssetExecutionContext) -> str:
+    api: OuraAPI = context.resources.oura_api
+    duck: DuckDBResource = context.resources.duckdb
+    con = duck.get_connection()
+    day = _day(context)
+    rows = api.fetch_rest_mode_periods(day, day)
+    n = _upsert_day(con, "rest_mode_periods", rows, day)
+    return f"rest_mode_periods:{day} rows={n}"

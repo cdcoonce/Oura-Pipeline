@@ -1,7 +1,17 @@
-name: "dbt_oura"
-version: "1.0.0"
-profile: "dbt_oura"
+name: "oura_analytics"
+version: "1.0"
+config-version: 2
+
+profile: "oura_duckdb"
+
 model-paths: ["models"]
+target-path: "target"
+clean-targets: ["target"]
+
 models:
-  dbt_oura:
-    +materialized: view
+  oura_analytics:
+    +materialized: table
+    staging:
+      +schema: "oura_staging"
+    marts:
+      +schema: "oura_marts"

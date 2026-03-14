@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: oura_raw
+    schema: oura_raw
+    tables:
+      - name: sleep
+      - name: activity
+      - name: readiness
+      - name: heartrate
+      - name: spo2
+      - name: stress
+      - name: resilience
+      - name: sleep_periods
+      - name: sleep_time
+      - name: workouts
+      - name: sessions
+      - name: tags
+      - name: rest_mode_periods

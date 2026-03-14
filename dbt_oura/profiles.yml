@@ -1,8 +1,8 @@
-dbt_oura:
+oura_duckdb:
   target: dev
   outputs:
     dev:
       type: duckdb
-      path: ./data/oura.duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'data/oura.duckdb') }}"
+      schema: "oura_marts"
       threads: 4
-      schema: oura_marts

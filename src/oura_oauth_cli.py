@@ -8,6 +8,9 @@ from urllib.parse import urlencode, urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 AUTH_URL = "https://cloud.ouraring.com/oauth/authorize"
@@ -22,7 +25,9 @@ def env(name: str, required: bool = True, default: str | None = None) -> str:
     return val
 
 
-def build_authorize_url(client_id: str, redirect_uri: str, scopes: str, state: str = "localdev") -> str:
+def build_authorize_url(
+    client_id: str, redirect_uri: str, scopes: str, state: str = "localdev"
+) -> str:
     params = {
         "response_type": "code",
         "client_id": client_id,
@@ -33,7 +38,9 @@ def build_authorize_url(client_id: str, redirect_uri: str, scopes: str, state: s
     return f"{AUTH_URL}?{urlencode(params)}"
 
 
-def exchange_code_for_tokens(code: str, client_id: str, client_secret: str, redirect_uri: str) -> dict:
+def exchange_code_for_tokens(
+    code: str, client_id: str, client_secret: str, redirect_uri: str
+) -> dict:
     resp = requests.post(
         TOKEN_URL,
         data={
@@ -51,7 +58,9 @@ def exchange_code_for_tokens(code: str, client_id: str, client_secret: str, redi
     return tokens
 
 
-def refresh_with_refresh_token(refresh_token: str, client_id: str, client_secret: str) -> dict:
+def refresh_with_refresh_token(
+    refresh_token: str, client_id: str, client_secret: str
+) -> dict:
     resp = requests.post(
         TOKEN_URL,
         data={
@@ -77,6 +86,7 @@ def save_tokens(path: str, tokens: dict) -> None:
 
 class _CodeHandler(BaseHTTPRequestHandler):
     """Minimal handler that grabs ?code=... on GET /callback and stores it on the server object."""
+
     def do_GET(self):
         parsed = urlparse(self.path)
         qs = parse_qs(parsed.query)
@@ -104,10 +114,10 @@ class _CodeHandler(BaseHTTPRequestHandler):
         return
 
 
-def run_local_callback_server(redirect_uri: str) -> str | None:
+def run_local_callback_server(redirect_uri: str) -> tuple[HTTPServer, threading.Thread]:
     """
     Start a tiny HTTP server bound to the host:port in redirect_uri and wait for one callback.
-    Returns the captured 'code' or None.
+    Returns the server and handler thread.
     """
     u = urlparse(redirect_uri)
     host = u.hostname or "127.0.0.1"
@@ -119,42 +129,50 @@ def run_local_callback_server(redirect_uri: str) -> str | None:
     # Serve one request in a background thread so we can open the browser
     t = threading.Thread(target=httpd.handle_request, daemon=True)
     t.start()
-    return httpd, t  # type: ignore[return-value]
+    return httpd, t
 
 
 def main():
     # Read config from env (matches your Dagster EnvVar setup)
-    CLIENT_ID     = env("OURA_CLIENT_ID")
-    CLIENT_SECRET = env("OURA_CLIENT_SECRET")
-    REDIRECT_URI  = env("OURA_REDIRECT_URI")  # e.g. http://127.0.0.1:8765/callback
-    SCOPES        = env("OURA_SCOPES")        # e.g. "daily heartrate workout session tag spo2"
-    TOKEN_PATH    = env("OURA_TOKEN_PATH", required=False, default="data/tokens/oura_tokens.json")
+    client_id = env("OURA_CLIENT_ID")
+    client_secret = env("OURA_CLIENT_SECRET")
+    redirect_uri = env("OURA_REDIRECT_URI")  # e.g. http://127.0.0.1:8765/callback
+    scopes = env("OURA_SCOPES")  # e.g. "daily heartrate workout session tag spo2"
+    token_path = env(
+        "OURA_TOKEN_PATH", required=False, default="data/tokens/oura_tokens.json"
+    )
 
     # If we already have a refresh token, you can refresh in-place (optional)
-    if os.path.exists(TOKEN_PATH):
+    if os.path.exists(token_path):
         try:
-            with open(TOKEN_PATH) as f:
+            with open(token_path) as f:
                 existing = json.load(f)
             if "refresh_token" in existing:
                 print("Found existing refresh_token; refreshing...")
-                new_tokens = refresh_with_refresh_token(existing["refresh_token"], CLIENT_ID, CLIENT_SECRET)
-                save_tokens(TOKEN_PATH, new_tokens)
+                new_tokens = refresh_with_refresh_token(
+                    existing["refresh_token"], client_id, client_secret
+                )
+                save_tokens(token_path, new_tokens)
                 return
         except Exception as e:
             print(f"Warning: existing token file unreadable, continuing fresh: {e}")
 
     # Build auth URL
-    authorize_url = build_authorize_url(CLIENT_ID, REDIRECT_URI, SCOPES)
+    authorize_url = build_authorize_url(client_id, redirect_uri, scopes)
     print("\nAuthorize URL:")
     print(authorize_url)
 
-    # Try auto-callback if REDIRECT_URI points to localhost with a path
+    # Try auto-callback if redirect_uri points to localhost with a path
     code = None
     try:
-        u = urlparse(REDIRECT_URI)
-        if u.scheme in ("http", "https") and (u.hostname in ("127.0.0.1", "localhost")) and u.path:
+        u = urlparse(redirect_uri)
+        if (
+            u.scheme in ("http", "https")
+            and (u.hostname in ("127.0.0.1", "localhost"))
+            and u.path
+        ):
             print("Starting local callback server and opening your browser...")
-            server, thread = run_local_callback_server(REDIRECT_URI)
+            server, thread = run_local_callback_server(redirect_uri)
             webbrowser.open(authorize_url)
             # Wait for the one request to be handled
             thread.join(timeout=300)  # 5 minutes
@@ -174,9 +192,9 @@ def main():
         print("ERROR: No code obtained.")
         sys.exit(1)
 
-    tokens = exchange_code_for_tokens(code, CLIENT_ID, CLIENT_SECRET, REDIRECT_URI)
-    save_tokens(TOKEN_PATH, tokens)
-    print("🎉 Done. You can now run your Dagster assets.")
+    tokens = exchange_code_for_tokens(code, client_id, client_secret, redirect_uri)
+    save_tokens(token_path, tokens)
+    print("Done. You can now run your Dagster assets.")
 
 
 if __name__ == "__main__":

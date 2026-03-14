@@ -29,6 +29,9 @@ dev = ["pytest>=7.4", "ruff>=0.4", "mypy>=1.8", "ipykernel>=6.29"]
 # src-layout: include both packages in the wheel
 packages = ["src/oura_client", "src/dagster_project"]
 
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
 [tool.dagster]
 module_name = "dagster_project.definitions"
 

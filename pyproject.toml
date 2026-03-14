@@ -31,3 +31,10 @@ packages = ["src/oura_client", "src/dagster_project"]
 
 [tool.dagster]
 module_name = "dagster_project.definitions"
+
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "dagster_project"
+defs_module = "dagster_project.defs"

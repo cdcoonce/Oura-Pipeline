@@ -4,6 +4,7 @@ import logging
 import os
 import time
 from datetime import date
+from pathlib import Path
 from typing import Any, Dict, Iterable
 
 import dagster as dg
@@ -143,7 +144,18 @@ class DuckDBResource(dg.ConfigurableResource):
 
     db_path: str = "data/oura.duckdb"
 
+    def _resolve_path(self) -> str:
+        """Resolve db_path to an absolute path relative to the project root."""
+        path = Path(self.db_path)
+        if path.is_absolute():
+            return str(path)
+        # Project root is 3 levels up from this file: defs/ -> dagster_project/ -> src/ -> root
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        resolved = project_root / path
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        return str(resolved)
+
     def get_connection(self) -> duckdb.DuckDBPyConnection:
-        con = duckdb.connect(self.db_path)
+        con = duckdb.connect(self._resolve_path())
         con.execute("CREATE SCHEMA IF NOT EXISTS oura_raw;")
         return con

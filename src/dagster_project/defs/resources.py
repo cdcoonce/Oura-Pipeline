@@ -139,21 +139,11 @@ class OuraAPI(dg.ConfigurableResource):
 
 
 class DuckDBResource(dg.ConfigurableResource):
-    """DuckDB connection provider — reuses a single connection per resource
-    instance to avoid file-lock conflicts under concurrent execution."""
+    """DuckDB connection provider."""
 
     db_path: str = "data/oura.duckdb"
-    _connection: duckdb.DuckDBPyConnection | None = None
-
-    model_config = {"arbitrary_types_allowed": True}
 
     def get_connection(self) -> duckdb.DuckDBPyConnection:
-        if self._connection is None:
-            self._connection = duckdb.connect(self.db_path)
-            self._connection.execute("CREATE SCHEMA IF NOT EXISTS oura_raw;")
-        return self._connection
-
-    def close(self) -> None:
-        if self._connection is not None:
-            self._connection.close()
-            self._connection = None
+        con = duckdb.connect(self.db_path)
+        con.execute("CREATE SCHEMA IF NOT EXISTS oura_raw;")
+        return con

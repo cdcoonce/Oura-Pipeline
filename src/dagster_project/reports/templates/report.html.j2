@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      /* Inline styles for email compatibility */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+        color: #333;
+      }
+      .header {
+        background: linear-gradient(135deg, #4a90d9, #7b68ee);
+        color: white;
+        padding: 24px;
+        border-radius: 12px;
+        margin-bottom: 24px;
+      }
+      .card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        text-align: left;
+        padding: 8px 12px;
+        border-bottom: 2px solid #e0e0e0;
+        font-size: 13px;
+        color: #666;
+      }
+      td {
+        padding: 8px 12px;
+        border-bottom: 1px solid #f0f0f0;
+      }
+      .trend-improving {
+        color: #50c878;
+      }
+      .trend-declining {
+        color: #ff6b6b;
+      }
+      .trend-stable {
+        color: #999;
+      }
+      .chart-img {
+        width: 100%;
+        max-width: 600px;
+        height: auto;
+      }
+      .personal-best {
+        color: #ffd700;
+        font-weight: bold;
+      }
+      .footer {
+        text-align: center;
+        color: #999;
+        font-size: 12px;
+        margin-top: 32px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 1. Header -->
+    <div class="header">
+      <h1>{{ "Weekly" if report_data.period_type == "weekly" else "Monthly" }} Health Report</h1>
+      <p>
+        {{ report_data.start_date.strftime('%B %d') }} — {{
+        report_data.end_date.strftime('%B %d, %Y') }}
+      </p>
+    </div>
+
+    <!-- 2. Key Metrics Summary -->
+    <div class="card">
+      <h2>Key Metrics</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Average</th>
+            <th>Best</th>
+            <th>Worst</th>
+            <th>Trend</th>
+            <th>Data</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in report_data.metric_summaries %}
+          <tr>
+            <td>{{ m.name | replace("_", " ") | title }}</td>
+            <td>{{ "%.1f" | format(m.mean) }}</td>
+            <td>{{ "%.1f" | format(m.max_val) }}</td>
+            <td>{{ "%.1f" | format(m.min_val) }}</td>
+            <td class="trend-{{ m.trend_direction }}">
+              {% if m.trend_direction == "improving" %}&#9650;{% elif
+              m.trend_direction == "declining" %}&#9660;{% else %}&#9654;{%
+              endif %} {{ "%.1f" | format(m.trend_pct | abs) }}%
+            </td>
+            <td>{{ m.days_with_data }}/{{ m.total_days }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 3. Trend Charts -->
+    {% if charts.daily_scores %}
+    <div class="card">
+      <h2>Daily Scores</h2>
+      <img
+        class="chart-img"
+        src="data:image/png;base64,{{ charts.daily_scores }}"
+        alt="Daily scores chart"
+      />
+    </div>
+    {% endif %} {% if charts.steps %}
+    <div class="card">
+      <h2>Steps</h2>
+      <img
+        class="chart-img"
+        src="data:image/png;base64,{{ charts.steps }}"
+        alt="Steps chart"
+      />
+    </div>
+    {% endif %}
+
+    <!-- 4. Personal Bests -->
+    {% if report_data.personal_bests %}
+    <div class="card">
+      <h2>Personal Bests</h2>
+      <ul>
+        {% for pb in report_data.personal_bests %}
+        <li>
+          <span class="personal-best"
+            >{{ pb.metric | replace("_", " ") | title }}</span
+          >: {{ "%.1f" | format(pb.value) }} on {{ pb.day.strftime('%A, %b %d')
+          }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- 5. Sleep Summary -->
+    {% if report_data.sleep_summary %}
+    <div class="card">
+      <h2>Sleep Summary</h2>
+      <table>
+        <tr>
+          <td>Average Duration</td>
+          <td>
+            {{ "%.1f" | format(report_data.sleep_summary.avg_duration_hrs) }}h
+          </td>
+        </tr>
+        <tr>
+          <td>Average Efficiency</td>
+          <td>
+            {{ "%.0f" | format(report_data.sleep_summary.avg_efficiency) }}%
+          </td>
+        </tr>
+        <tr>
+          <td>Average HRV</td>
+          <td>{{ "%.1f" | format(report_data.sleep_summary.avg_hrv) }} ms</td>
+        </tr>
+        <tr>
+          <td>Average Heart Rate</td>
+          <td>{{ "%.1f" | format(report_data.sleep_summary.avg_hr) }} bpm</td>
+        </tr>
+        <tr>
+          <td>Deep / Light / REM / Awake</td>
+          <td>
+            {{ "%.0f" | format(report_data.sleep_summary.deep_pct) }}% / {{
+            "%.0f" | format(report_data.sleep_summary.light_pct) }}% / {{ "%.0f"
+            | format(report_data.sleep_summary.rem_pct) }}% / {{ "%.0f" |
+            format(report_data.sleep_summary.awake_pct) }}%
+          </td>
+        </tr>
+      </table>
+    </div>
+    {% endif %}
+
+    <!-- 6. Sleep Stages Chart -->
+    {% if charts.sleep_stages %}
+    <div class="card">
+      <h2>Sleep Stages</h2>
+      <img
+        class="chart-img"
+        src="data:image/png;base64,{{ charts.sleep_stages }}"
+        alt="Sleep stages chart"
+      />
+    </div>
+    {% endif %}
+
+    {% if charts.hrv_trend %}
+    <div class="card">
+      <h2>HRV Trend</h2>
+      <img
+        class="chart-img"
+        src="data:image/png;base64,{{ charts.hrv_trend }}"
+        alt="HRV trend chart"
+      />
+    </div>
+    {% endif %}
+
+    <!-- 8. Workouts -->
+    {% if report_data.workout_summary %}
+    <div class="card">
+      <h2>Activity & Workouts</h2>
+      <p>
+        <strong>{{ report_data.workout_summary.total_count }}</strong> sessions
+        &middot;
+        <strong
+          >{{ "%.0f" | format(report_data.workout_summary.total_calories)
+          }}</strong
+        >
+        total calories
+      </p>
+      <ul>
+        {% for activity, count in
+        report_data.workout_summary.by_activity.items() %}
+        <li>
+          {{ activity | replace("_", " ") | title }}: {{ count }} sessions
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- 9. Areas to Improve -->
+    {% if report_data.areas_to_improve %}
+    <div class="card">
+      <h2>Areas to Improve</h2>
+      {% for area in report_data.areas_to_improve %}
+      <div style="margin-bottom: 12px;">
+        <strong>{{ area.metric | replace("_", " ") | title }}</strong>
+        <span style="color: #999;"
+          >(avg: {{ "%.1f" | format(area.current_avg) }})</span
+        >
+        <br /><span style="color: #FF6B6B;">{{ area.reason }}</span> <br /><em
+          >{{ area.suggestion }}</em
+        >
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- 10. Footer -->
+    <div class="footer">
+      <p>Generated by Oura Pipeline &middot; {{ generated_at }}</p>
+    </div>
+  </body>
+</html>

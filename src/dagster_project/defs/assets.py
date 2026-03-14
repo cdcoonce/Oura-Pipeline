@@ -193,7 +193,6 @@ def _make_daily_asset(kind: str) -> Callable:
         day = _day(context)
         rows = oura_api.fetch_daily(kind, day, day)
         count = _upsert_day(con, kind, rows, day)
-        con.close()
         return dg.MaterializeResult(
             metadata={
                 "dagster/row_count": dg.MetadataValue.int(count),
@@ -224,7 +223,6 @@ def _make_granular_asset(table: str, fetch_method: str) -> Callable:
         day = _day(context)
         rows = getattr(oura_api, fetch_method)(day, day)
         count = _upsert_day(con, table, rows, day)
-        con.close()
         return dg.MaterializeResult(
             metadata={
                 "dagster/row_count": dg.MetadataValue.int(count),

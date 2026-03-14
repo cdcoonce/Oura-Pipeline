@@ -20,6 +20,7 @@ dependencies = [
   "python-dotenv>=1.0",
   "pyarrow>=21.0.0",
   "pandas>=2.3.1",
+  "dagster-cloud",
 ]
 
 [project.optional-dependencies]

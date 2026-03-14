@@ -44,6 +44,21 @@ jobs:
           ref: ${{ github.head_ref }}
           path: project-repo
 
+      - name: Set up Python
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Generate dbt manifest
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        run: |
+          cd project-repo
+          pip install dbt-core dbt-duckdb
+          cd dbt_oura
+          dbt deps
+          dbt parse --profiles-dir .
+
       - name: Python Executable Deploy
         if: steps.prerun.outputs.result == 'pex-deploy'
         uses: dagster-io/dagster-cloud-action/actions/build_deploy_python_executable@v1.12.19

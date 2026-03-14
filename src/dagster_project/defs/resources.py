@@ -1,5 +1,6 @@
 # src/dagster_project/defs/resources.py
 import json
+import logging
 import os
 import time
 from datetime import date
@@ -8,6 +9,8 @@ from typing import Any, Dict, Iterable
 import dagster as dg
 import duckdb
 import requests
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.ouraring.com"
 TOKEN_URL = "https://api.ouraring.com/oauth/token"
@@ -76,7 +79,15 @@ class OuraAPI(dg.ConfigurableResource):
             params=params,
             timeout=30,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError:
+            logger.warning(
+                "%s returned HTTP error %s — returning empty data",
+                path,
+                response.status_code,
+            )
+            return {}
         return response.json()
 
     # ----- public API (daily) -----

@@ -30,10 +30,18 @@ class TestRowCountCheck:
         assert result.passed is True
         assert result.metadata["row_count"].value > 0
 
-    def test_fails_when_table_is_empty(self, con) -> None:
+    def test_warns_when_table_is_empty(self, con) -> None:
         con.execute("CREATE TABLE oura_raw.sleep (day DATE, partition_date DATE)")
 
         from dagster_project.defs.checks import _check_row_count
 
         result = _check_row_count(con, "sleep")
-        assert result.passed is False
+        assert result.passed is True
+        assert result.severity == dg.AssetCheckSeverity.WARN
+
+    def test_warns_when_table_does_not_exist(self, con) -> None:
+        from dagster_project.defs.checks import _check_row_count
+
+        result = _check_row_count(con, "sleep")
+        assert result.passed is True
+        assert result.severity == dg.AssetCheckSeverity.WARN

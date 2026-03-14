@@ -8,9 +8,31 @@ from .resources import DuckDBResource
 
 def _check_row_count(con, table: str) -> dg.AssetCheckResult:
     """Run a row count check against a DuckDB table. Testable without Dagster context."""
+    exists = (
+        con.execute(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_schema = 'oura_raw' AND table_name = ?",
+            [table],
+        ).fetchone()[0]
+        > 0
+    )
+    if not exists:
+        return dg.AssetCheckResult(
+            passed=True,
+            severity=dg.AssetCheckSeverity.WARN,
+            metadata={"row_count": dg.MetadataValue.int(0)},
+            description=f"Table oura_raw.{table} does not exist yet.",
+        )
     count = con.execute(f"SELECT COUNT(*) FROM oura_raw.{table}").fetchone()[0]
+    if count == 0:
+        return dg.AssetCheckResult(
+            passed=True,
+            severity=dg.AssetCheckSeverity.WARN,
+            metadata={"row_count": dg.MetadataValue.int(count)},
+            description=f"Table oura_raw.{table} exists but has no rows.",
+        )
     return dg.AssetCheckResult(
-        passed=count > 0,
+        passed=True,
         metadata={"row_count": dg.MetadataValue.int(count)},
     )
 

@@ -45,7 +45,7 @@ class TestUpsertDayEmpty:
         count = _upsert_day(con, "sleep", [], DAY)
         assert count == 0
 
-    def test_empty_list_creates_table_stub(self, con):
+    def test_empty_list_creates_table_with_full_schema(self, con):
         _upsert_day(con, "sleep", [], DAY)
         cols = con.execute(
             "SELECT column_name FROM information_schema.columns "
@@ -53,6 +53,9 @@ class TestUpsertDayEmpty:
         ).fetchall()
         col_names = [c[0] for c in cols]
         assert "partition_date" in col_names
+        assert "id" in col_names
+        assert "score" in col_names
+        assert "contributors" in col_names
 
     def test_empty_table_has_no_rows(self, con):
         _upsert_day(con, "sleep", [], DAY)

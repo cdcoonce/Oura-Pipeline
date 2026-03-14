@@ -3,6 +3,6 @@ oura_duckdb:
   outputs:
     dev:
       type: duckdb
-      path: "{{ env_var('DUCKDB_PATH', 'data/oura.duckdb') }}"
+      path: "{{ env_var('DUCKDB_PATH', '../data/oura.duckdb') }}"
       schema: "oura_marts"
       threads: 4

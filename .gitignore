@@ -218,4 +218,5 @@ data/tokens/*.json
 data/raw/*.parquet
 
 # Dagster files
+.dagster/
 .tmp*

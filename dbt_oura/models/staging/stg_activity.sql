@@ -7,6 +7,6 @@ with src as (
 select
   day::date as day,
   steps,
-  calories,
+  total_calories as calories,
   partition_date
 from src

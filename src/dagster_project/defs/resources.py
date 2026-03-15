@@ -136,7 +136,14 @@ class OuraAPI(dg.ConfigurableResource):
             },
             timeout=30,
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            raise RuntimeError(
+                f"OAuth token refresh failed ({resp.status_code}): "
+                f"{resp.text}. "
+                "The refresh token is likely expired or revoked. "
+                "Re-run 'uv run python src/oura_oauth_cli.py' to get new "
+                "tokens and re-seed them into OURA.CONFIG.OAUTH_TOKENS."
+            )
         refreshed_tokens = resp.json()
         refreshed_tokens["obtained_at"] = int(time.time())
         self._save_tokens(refreshed_tokens)

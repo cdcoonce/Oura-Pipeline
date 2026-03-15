@@ -116,8 +116,8 @@ class TestGetAccessToken:
             "expires_in": 86400,
         }
         mock_resp = MagicMock()
+        mock_resp.ok = True
         mock_resp.json.return_value = new_tokens
-        mock_resp.raise_for_status = MagicMock()
 
         mocker.patch("requests.post", return_value=mock_resp)
 
@@ -128,6 +128,27 @@ class TestGetAccessToken:
         result = api._get_access_token()
         assert result == "new_access"
         api._save_tokens.assert_called_once()
+
+    def test_refresh_failure_raises_with_reseed_instructions(self, mocker):
+        """Failed refresh raises RuntimeError with clear re-seed message."""
+        old_tokens = {
+            "access_token": "old",
+            "refresh_token": "bad_refresh",
+            "expires_in": 86400,
+            "obtained_at": 0,
+        }
+        mock_resp = MagicMock()
+        mock_resp.ok = False
+        mock_resp.status_code = 400
+        mock_resp.text = "invalid_grant"
+
+        mocker.patch("requests.post", return_value=mock_resp)
+
+        api = _make_api()
+        api._load_tokens = MagicMock(return_value=old_tokens)
+
+        with pytest.raises(RuntimeError, match="refresh token is likely expired"):
+            api._get_access_token()
 
 
 class TestGetHttpErrorHandling:

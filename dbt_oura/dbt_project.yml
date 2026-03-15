@@ -2,7 +2,7 @@ name: "oura_analytics"
 version: "1.0"
 config-version: 2
 
-profile: "oura_duckdb"
+profile: "oura_snowflake"
 
 model-paths: ["models"]
 target-path: "target"

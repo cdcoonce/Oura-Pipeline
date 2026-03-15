@@ -8,7 +8,7 @@ import snowflake.connector
 
 from .resources import OuraAPI, SnowflakeResource
 
-partitions = dg.DailyPartitionsDefinition(start_date="2024-01-01")
+partitions = dg.DailyPartitionsDefinition(start_date="2026-01-01")
 
 
 def _day(context: dg.AssetExecutionContext) -> date:

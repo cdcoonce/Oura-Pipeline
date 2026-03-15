@@ -303,7 +303,7 @@ uv run dagster dev
 # Then navigate to http://localhost:3000 to materialize assets
 ```
 
-From the Dagster UI, you can materialize individual assets or backfill date ranges using the daily partition selector. Partitions start from `2024-01-01`.
+From the Dagster UI, you can materialize individual assets or backfill date ranges using the daily partition selector. Partitions start from `2026-01-01`.
 
 ### Running Tests
 
@@ -342,7 +342,7 @@ Snowflake integration tests require `SNOWFLAKE_ACCOUNT` in the environment and a
 
 ## Oura API Endpoints
 
-Each endpoint maps to a Dagster asset with daily partitions starting from `2024-01-01`. All raw data lands in Snowflake's `oura_raw` schema as VARIANT columns via an idempotent delete-then-insert upsert with temp table batching.
+Each endpoint maps to a Dagster asset with daily partitions starting from `2026-01-01`. All raw data lands in Snowflake's `oura_raw` schema as VARIANT columns via an idempotent delete-then-insert upsert with temp table batching.
 
 ### Daily Summary Assets
 

@@ -5,7 +5,6 @@ render HTML, and send via email. Two assets share a common helper,
 differing only in date range computation.
 """
 
-import calendar
 import logging
 from datetime import date, timedelta
 
@@ -20,7 +19,7 @@ from ..reports.report_data import (
 )
 from ..reports.report_delivery import DeliveryError, SESDeliveryResource
 from ..reports.report_renderer import render_report
-from .resources import DuckDBResource
+from .resources import SnowflakeResource
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +67,7 @@ def _previous_month_range() -> tuple[date, date]:
 
 def _generate_and_send_report(
     context: dg.AssetExecutionContext,
-    duckdb: DuckDBResource,
+    snowflake: SnowflakeResource,
     ses: SESDeliveryResource,
     period_type: str,
     start_date: date,
@@ -80,7 +79,7 @@ def _generate_and_send_report(
     ----------
     context : dg.AssetExecutionContext
         Dagster execution context for logging and metadata.
-    duckdb : DuckDBResource
+    snowflake : SnowflakeResource
         Database connection provider.
     ses : SESDeliveryResource
         Email delivery resource.
@@ -101,7 +100,7 @@ def _generate_and_send_report(
     dg.Failure
         On DeliveryError (SES send failure) -- surfaces in Dagster UI as red run.
     """
-    con = duckdb.get_connection()
+    con = snowflake.get_connection()
     try:
         # 1. Fetch data
         context.log.info(
@@ -190,12 +189,12 @@ def _generate_and_send_report(
 )
 def weekly_health_report(
     context: dg.AssetExecutionContext,
-    duckdb: DuckDBResource,
+    snowflake: SnowflakeResource,
     ses: SESDeliveryResource,
 ) -> dg.MaterializeResult:
     """Generate and email weekly health report for the previous Mon-Sun."""
     start, end = _previous_week_range()
-    return _generate_and_send_report(context, duckdb, ses, "weekly", start, end)
+    return _generate_and_send_report(context, snowflake, ses, "weekly", start, end)
 
 
 @dg.asset(
@@ -205,9 +204,9 @@ def weekly_health_report(
 )
 def monthly_health_report(
     context: dg.AssetExecutionContext,
-    duckdb: DuckDBResource,
+    snowflake: SnowflakeResource,
     ses: SESDeliveryResource,
 ) -> dg.MaterializeResult:
     """Generate and email monthly health report for the previous calendar month."""
     start, end = _previous_month_range()
-    return _generate_and_send_report(context, duckdb, ses, "monthly", start, end)
+    return _generate_and_send_report(context, snowflake, ses, "monthly", start, end)

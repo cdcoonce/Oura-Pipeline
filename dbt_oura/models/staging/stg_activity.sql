@@ -1,12 +1,11 @@
 {{ config(materialized='table') }}
 
 with src as (
-  select *
-  from {{ source('oura_raw', 'activity') }}
+  select * from {{ source('oura_raw', 'activity') }}
 )
 select
-  day::date as day,
-  steps,
-  total_calories as calories,
+  raw_data:day::date as day,
+  raw_data:steps::int as steps,
+  raw_data:total_calories::int as calories,
   partition_date
 from src

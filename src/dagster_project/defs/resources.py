@@ -1,15 +1,20 @@
 # src/dagster_project/defs/resources.py
+import base64
 import json
 import logging
-import os
 import time
 from datetime import date
-from pathlib import Path
 from typing import Any, Dict, Iterable
 
 import dagster as dg
-import duckdb
 import requests
+import snowflake.connector
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+    load_pem_private_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,24 +32,90 @@ DAILY_MAP = {
 }
 
 
+class SnowflakeResource(dg.ConfigurableResource):
+    """Snowflake connection provider using key-pair authentication."""
+
+    account: str
+    user: str
+    private_key: str  # base64-encoded PEM private key
+    warehouse: str = "COMPUTE_WH"
+    database: str = "OURA"
+    schema_name: str = "OURA_RAW"
+    role: str = "TRANSFORM"
+
+    def _get_private_key_bytes(self) -> bytes:
+        """Decode base64 PEM → DER bytes for snowflake-connector-python."""
+        pem_bytes = base64.b64decode(self.private_key)
+        pk = load_pem_private_key(pem_bytes, password=None)
+        return pk.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
+
+    def get_connection(self) -> snowflake.connector.SnowflakeConnection:
+        """Open a Snowflake connection with key-pair auth."""
+        logger.info(
+            "Connecting to Snowflake account=%s warehouse=%s database=%s role=%s",
+            self.account,
+            self.warehouse,
+            self.database,
+            self.role,
+        )
+        return snowflake.connector.connect(
+            account=self.account,
+            user=self.user,
+            private_key=self._get_private_key_bytes(),
+            warehouse=self.warehouse,
+            database=self.database,
+            schema=self.schema_name,
+            role=self.role,
+        )
+
+
 class OuraAPI(dg.ConfigurableResource):
-    """OAuth2-backed Oura API (pulls/refreshes tokens automatically)."""
+    """OAuth2-backed Oura API with Snowflake-backed token storage."""
 
     client_id: str
     client_secret: str
-    token_path: str = "data/tokens/oura_tokens.json"
+    snowflake: SnowflakeResource
+
+    def _get_token_connection(self) -> snowflake.connector.SnowflakeConnection:
+        """Get a Snowflake connection for token operations."""
+        return self.snowflake.get_connection()
 
     # ----- token helpers -----
     def _load_tokens(self) -> Dict[str, Any]:
-        if not os.path.exists(self.token_path):
-            raise FileNotFoundError(f"Token file not found: {self.token_path}")
-        with open(self.token_path) as f:
-            return json.load(f)
+        """Load the most recent OAuth tokens from Snowflake."""
+        con = self._get_token_connection()
+        try:
+            cursor = con.cursor()
+            cursor.execute(
+                "SELECT token_data FROM OURA.CONFIG.OAUTH_TOKENS "
+                "ORDER BY updated_at DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise FileNotFoundError(
+                    "No OAuth tokens found in OURA.CONFIG.OAUTH_TOKENS. "
+                    "Seed tokens using the setup SQL from Phase 0."
+                )
+            token_data = row[0]
+            if isinstance(token_data, str):
+                return json.loads(token_data)
+            return dict(token_data)
+        finally:
+            con.close()
 
     def _save_tokens(self, tokens: Dict[str, Any]) -> None:
-        os.makedirs(os.path.dirname(self.token_path), exist_ok=True)
-        with open(self.token_path, "w") as f:
-            json.dump(tokens, f, indent=2)
+        """Persist refreshed OAuth tokens to Snowflake."""
+        con = self._get_token_connection()
+        try:
+            cursor = con.cursor()
+            cursor.execute(
+                "INSERT INTO OURA.CONFIG.OAUTH_TOKENS (token_data) "
+                "SELECT PARSE_JSON(%s)",
+                (json.dumps(tokens),),
+            )
+            logger.info("Saved refreshed OAuth tokens to Snowflake")
+        finally:
+            con.close()
 
     def _get_access_token(self) -> str:
         tokens = self._load_tokens()
@@ -65,7 +136,14 @@ class OuraAPI(dg.ConfigurableResource):
             },
             timeout=30,
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            raise RuntimeError(
+                f"OAuth token refresh failed ({resp.status_code}): "
+                f"{resp.text}. "
+                "The refresh token is likely expired or revoked. "
+                "Re-run 'uv run python src/oura_oauth_cli.py' to get new "
+                "tokens and re-seed them into OURA.CONFIG.OAUTH_TOKENS."
+            )
         refreshed_tokens = resp.json()
         refreshed_tokens["obtained_at"] = int(time.time())
         self._save_tokens(refreshed_tokens)
@@ -137,25 +215,3 @@ class OuraAPI(dg.ConfigurableResource):
             "/v2/usercollection/rest_mode_period",
             {"start_date": start, "end_date": end},
         ).get("data", [])
-
-
-class DuckDBResource(dg.ConfigurableResource):
-    """DuckDB connection provider."""
-
-    db_path: str = "data/oura.duckdb"
-
-    def _resolve_path(self) -> str:
-        """Resolve db_path to an absolute path relative to the project root."""
-        path = Path(self.db_path)
-        if path.is_absolute():
-            return str(path)
-        # Project root is 3 levels up from this file: defs/ -> dagster_project/ -> src/ -> root
-        project_root = Path(__file__).resolve().parent.parent.parent.parent
-        resolved = project_root / path
-        resolved.parent.mkdir(parents=True, exist_ok=True)
-        return str(resolved)
-
-    def get_connection(self) -> duckdb.DuckDBPyConnection:
-        con = duckdb.connect(self._resolve_path())
-        con.execute("CREATE SCHEMA IF NOT EXISTS oura_raw;")
-        return con

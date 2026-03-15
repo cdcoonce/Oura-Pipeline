@@ -1,21 +1,27 @@
 """Asset checks for Oura raw data tables."""
 
 import dagster as dg
+import snowflake.connector
 
 from .assets import VALID_TABLES
-from .resources import DuckDBResource
+from .resources import SnowflakeResource
 
 
-def _check_row_count(con, table: str) -> dg.AssetCheckResult:
-    """Run a row count check against a DuckDB table. Testable without Dagster context."""
-    exists = (
-        con.execute(
-            "SELECT COUNT(*) FROM information_schema.tables "
-            "WHERE table_schema = 'oura_raw' AND table_name = ?",
-            [table],
-        ).fetchone()[0]
-        > 0
+def _check_row_count(
+    con: snowflake.connector.SnowflakeConnection,
+    table: str,
+) -> dg.AssetCheckResult:
+    """Run a row count check against a Snowflake table."""
+    cursor = con.cursor()
+
+    # Snowflake stores unquoted identifiers in UPPERCASE
+    cursor.execute(
+        "SELECT COUNT(*) FROM information_schema.tables "
+        "WHERE table_schema = 'OURA_RAW' AND table_name = %s",
+        (table.upper(),),
     )
+    exists = cursor.fetchone()[0] > 0
+
     if not exists:
         return dg.AssetCheckResult(
             passed=True,
@@ -23,7 +29,10 @@ def _check_row_count(con, table: str) -> dg.AssetCheckResult:
             metadata={"row_count": dg.MetadataValue.int(0)},
             description=f"Table oura_raw.{table} does not exist yet.",
         )
-    count = con.execute(f"SELECT COUNT(*) FROM oura_raw.{table}").fetchone()[0]
+
+    cursor.execute(f"SELECT COUNT(*) FROM oura_raw.{table}")
+    count = cursor.fetchone()[0]
+
     if count == 0:
         return dg.AssetCheckResult(
             passed=True,
@@ -31,6 +40,7 @@ def _check_row_count(con, table: str) -> dg.AssetCheckResult:
             metadata={"row_count": dg.MetadataValue.int(count)},
             description=f"Table oura_raw.{table} exists but has no rows.",
         )
+
     return dg.AssetCheckResult(
         passed=True,
         metadata={"row_count": dg.MetadataValue.int(count)},
@@ -44,8 +54,8 @@ def make_row_count_check(table: str) -> dg.AssetChecksDefinition:
         asset=dg.AssetKey(["oura_raw", table]),
         description=f"Checks that oura_raw.{table} has at least one row.",
     )
-    def _check(duckdb: DuckDBResource) -> dg.AssetCheckResult:
-        con = duckdb.get_connection()
+    def _check(snowflake: SnowflakeResource) -> dg.AssetCheckResult:
+        con = snowflake.get_connection()
         result = _check_row_count(con, table)
         con.close()
         return result

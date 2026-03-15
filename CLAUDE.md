@@ -64,6 +64,11 @@ Skills live in `.claude/skills/`. Each `SKILL.md` defines an invocable skill wit
 **Trigger when:** user asks to create, generate, update, or improve a README, or says "document this project".
 **References:** [.claude/skills/readme-generator/references/](.claude/skills/readme-generator/references/) — analysis methodology, mermaid guidelines, badge reference.
 
+### `/plan-ceo-review`
+
+**Trigger when:** user asks for a plan review, CEO review, mega review, or wants a plan challenged/stress-tested before implementation.
+**References:** [.claude/skills/plan-ceo-review/references/](.claude/skills/plan-ceo-review/references/) — review sections, required outputs.
+
 ### `/project-context`
 
 **Trigger when:** user asks to create, update, or refresh project context, says "update project.md", or when onboarding Claude to a new repo.

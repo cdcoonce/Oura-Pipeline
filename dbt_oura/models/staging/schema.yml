@@ -1,0 +1,121 @@
+version: 2
+
+models:
+  - name: stg_sleep
+    columns:
+      - name: id
+        tests: [not_null]
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+      - name: sleep_score
+        tests: [not_null]
+
+  - name: stg_activity
+    columns:
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+      - name: steps
+        tests: [not_null]
+
+  - name: stg_readiness
+    columns:
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+      - name: readiness_score
+        tests: [not_null]
+
+  - name: stg_heartrate
+    columns:
+      - name: ts
+        tests: [not_null]
+      - name: bpm
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+
+  - name: stg_spo2
+    columns:
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+      - name: avg_spo2_pct
+        tests: [not_null]
+
+  - name: stg_stress
+    columns:
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+      - name: stress_high
+        tests: [not_null]
+
+  - name: stg_resilience
+    columns:
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+      - name: resilience_level
+        tests: [not_null]
+
+  - name: stg_sleep_periods
+    columns:
+      - name: id
+        tests: [not_null]
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+      - name: sleep_type
+        tests: [not_null]
+
+  - name: stg_sleep_time
+    columns:
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+
+  - name: stg_workouts
+    columns:
+      - name: id
+        tests: [not_null]
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+      - name: workout_activity
+        tests: [not_null]
+
+  - name: stg_sessions
+    columns:
+      - name: id
+        tests: [not_null]
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+
+  - name: stg_tags
+    columns:
+      - name: id
+        tests: [not_null]
+      - name: day
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]
+
+  - name: stg_rest_mode_periods
+    columns:
+      - name: id
+        tests: [not_null]
+      - name: partition_date
+        tests: [not_null]

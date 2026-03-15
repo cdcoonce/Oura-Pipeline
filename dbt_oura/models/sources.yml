@@ -2,18 +2,58 @@ version: 2
 
 sources:
   - name: oura_raw
+    database: "{{ env_var('SNOWFLAKE_DATABASE', 'OURA') }}"
     schema: oura_raw
     tables:
       - name: sleep
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: activity
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: readiness
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: heartrate
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: spo2
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: stress
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: resilience
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: sleep_periods
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: sleep_time
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: workouts
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: sessions
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: tags
+        columns:
+          - name: raw_data
+          - name: partition_date
       - name: rest_mode_periods
+        columns:
+          - name: raw_data
+          - name: partition_date

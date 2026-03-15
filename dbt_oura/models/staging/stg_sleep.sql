@@ -1,20 +1,19 @@
 {{ config(materialized='table') }}
 
 with src as (
-  select *
-  from {{ source('oura_raw', 'sleep') }}
+  select * from {{ source('oura_raw', 'sleep') }}
 )
 select
-  id,
-  day::date as day,
-  score as sleep_score,
-  contributors.deep_sleep as deep_sleep_score,
-  contributors.efficiency as efficiency_score,
-  contributors.latency as latency_score,
-  contributors.rem_sleep as rem_sleep_score,
-  contributors.restfulness as restfulness_score,
-  contributors.timing as timing_score,
-  contributors.total_sleep as total_sleep_score,
-  timestamp,
+  raw_data:id::varchar as id,
+  raw_data:day::date as day,
+  raw_data:score::int as sleep_score,
+  raw_data:contributors:deep_sleep::int as deep_sleep_score,
+  raw_data:contributors:efficiency::int as efficiency_score,
+  raw_data:contributors:latency::int as latency_score,
+  raw_data:contributors:rem_sleep::int as rem_sleep_score,
+  raw_data:contributors:restfulness::int as restfulness_score,
+  raw_data:contributors:timing::int as timing_score,
+  raw_data:contributors:total_sleep::int as total_sleep_score,
+  raw_data:timestamp::varchar as timestamp,
   partition_date
 from src

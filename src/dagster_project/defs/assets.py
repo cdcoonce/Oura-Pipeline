@@ -1,11 +1,14 @@
-import dagster as dg
-import polars as pl
+import json
+from collections.abc import Iterable
 from datetime import date, datetime
-from typing import Any, Callable, Dict, Iterable
+from typing import Any, Callable, Dict
 
-from .resources import DuckDBResource, OuraAPI
+import dagster as dg
+import snowflake.connector
 
-partitions = dg.DailyPartitionsDefinition(start_date="2024-01-01")
+from .resources import OuraAPI, SnowflakeResource
+
+partitions = dg.DailyPartitionsDefinition(start_date="2026-01-01")
 
 
 def _day(context: dg.AssetExecutionContext) -> date:
@@ -30,144 +33,67 @@ VALID_TABLES = frozenset(
     }
 )
 
-# Expected column schemas for each raw table (Oura API v2 response shapes).
-# Used to create properly-typed empty tables when the API returns no data,
-# so downstream dbt models can reference all expected columns.
-TABLE_SCHEMAS: Dict[str, str] = {
-    "sleep": """
-        id VARCHAR,
-        contributors STRUCT(
-            deep_sleep BIGINT, efficiency BIGINT, latency BIGINT,
-            rem_sleep BIGINT, restfulness BIGINT, timing BIGINT,
-            total_sleep BIGINT
-        ),
-        day VARCHAR, score BIGINT, "timestamp" VARCHAR,
-        partition_date DATE
-    """,
-    "activity": """
-        id VARCHAR, day VARCHAR, class_5_min VARCHAR,
-        score BIGINT, active_calories BIGINT, average_met_minutes DOUBLE,
-        contributors STRUCT(
-            meet_daily_targets BIGINT, move_every_hour BIGINT,
-            recovery_time BIGINT, stay_active BIGINT, training_frequency BIGINT,
-            training_volume BIGINT
-        ),
-        equivalent_walking_distance BIGINT, high_activity_met_minutes DOUBLE,
-        high_activity_time BIGINT, inactivity_alerts BIGINT,
-        low_activity_met_minutes DOUBLE, low_activity_time BIGINT,
-        medium_activity_met_minutes DOUBLE, medium_activity_time BIGINT,
-        met STRUCT(interval DOUBLE, items DOUBLE[], "timestamp" VARCHAR),
-        meters_to_target BIGINT, non_wear_time BIGINT,
-        resting_time BIGINT, sedentary_met_minutes DOUBLE,
-        sedentary_time BIGINT, steps BIGINT, target_calories BIGINT,
-        target_meters BIGINT, total_calories BIGINT, "timestamp" VARCHAR,
-        partition_date DATE
-    """,
-    "readiness": """
-        id VARCHAR,
-        contributors STRUCT(
-            activity_balance BIGINT, body_temperature BIGINT,
-            hrv_balance INTEGER, previous_day_activity BIGINT,
-            previous_night BIGINT, recovery_index BIGINT,
-            resting_heart_rate BIGINT, sleep_balance INTEGER,
-            sleep_regularity INTEGER
-        ),
-        day VARCHAR, score BIGINT, temperature_deviation DOUBLE,
-        temperature_trend_deviation DOUBLE, "timestamp" VARCHAR,
-        partition_date DATE
-    """,
-    "spo2": """
-        id VARCHAR, day VARCHAR,
-        spo2_percentage STRUCT(average DOUBLE),
-        breathing_disturbance_index BIGINT,
-        partition_date DATE
-    """,
-    "stress": """
-        id VARCHAR, day VARCHAR, stress_high BIGINT,
-        recovery_high BIGINT, day_summary INTEGER,
-        partition_date DATE
-    """,
-    "resilience": """
-        id VARCHAR, day VARCHAR, level VARCHAR,
-        contributors STRUCT(
-            sleep_recovery DOUBLE, daytime_recovery DOUBLE, stress DOUBLE
-        ),
-        partition_date DATE
-    """,
-    "heartrate": """
-        "timestamp" VARCHAR, bpm BIGINT, source VARCHAR,
-        partition_date DATE
-    """,
-    "sleep_periods": """
-        id VARCHAR, day VARCHAR, bedtime_start VARCHAR, bedtime_end VARCHAR,
-        type VARCHAR, total_sleep_duration BIGINT,
-        deep_sleep_duration BIGINT, light_sleep_duration BIGINT,
-        rem_sleep_duration BIGINT, awake_time BIGINT, time_in_bed BIGINT,
-        efficiency BIGINT, latency BIGINT,
-        average_heart_rate DOUBLE, average_hrv DOUBLE,
-        lowest_heart_rate BIGINT, average_breath DOUBLE,
-        restless_periods BIGINT,
-        partition_date DATE
-    """,
-    "sleep_time": """
-        id VARCHAR, day VARCHAR,
-        optimal_bedtime STRUCT(
-            start_offset INTEGER, end_offset INTEGER, day_tz INTEGER
-        ),
-        recommendation VARCHAR, status VARCHAR,
-        partition_date DATE
-    """,
-    "workouts": """
-        id VARCHAR, day VARCHAR, activity VARCHAR,
-        start_datetime VARCHAR, end_datetime VARCHAR,
-        intensity VARCHAR, source VARCHAR,
-        calories DOUBLE, distance DOUBLE, label VARCHAR,
-        partition_date DATE
-    """,
-    "sessions": """
-        id VARCHAR, day VARCHAR,
-        start_datetime VARCHAR, end_datetime VARCHAR,
-        type VARCHAR, mood VARCHAR,
-        partition_date DATE
-    """,
-    "tags": """
-        id VARCHAR, day VARCHAR,
-        "timestamp" VARCHAR, text VARCHAR, tags VARCHAR[],
-        partition_date DATE
-    """,
-    "rest_mode_periods": """
-        id VARCHAR, start_day VARCHAR, start_time VARCHAR,
-        end_day VARCHAR, end_time VARCHAR,
-        partition_date DATE
-    """,
-}
 
-
-def _upsert_day(con, table: str, rows: Iterable[Dict[str, Any]], day: date) -> int:
+def _upsert_day(
+    con: snowflake.connector.SnowflakeConnection,
+    table: str,
+    rows: Iterable[Dict[str, Any]] | None,
+    day: date,
+) -> int:
     """
-    Idempotent load into oura_raw.<table> using a synthetic partition_date column.
-    Deletes existing rows for that day, then inserts fresh.
+    Idempotent load into oura_raw.<table> using DELETE + batched INSERT.
+
+    Each row is stored as a VARIANT (raw_data) plus a partition_date DATE.
+    Uses executemany() for efficient batching — critical for heartrate data
+    which has ~2000 rows/day.
+
+    Parameters
+    ----------
+    con : SnowflakeConnection
+        Active Snowflake connection.
+    table : str
+        Target table name (must be in VALID_TABLES whitelist).
+    rows : Iterable[dict] | None
+        API response rows to insert.
+    day : date
+        Partition date for idempotent upsert.
+
+    Returns
+    -------
+    int
+        Number of rows inserted.
     """
     if table not in VALID_TABLES:
         raise ValueError(f"Invalid table name: {table!r}")
-    df = pl.from_dicts(list(rows)) if rows else pl.DataFrame()
-    con.execute("CREATE SCHEMA IF NOT EXISTS oura_raw;")
-    if df.is_empty():
-        schema = TABLE_SCHEMAS.get(table, "partition_date DATE")
-        con.execute(f"CREATE TABLE IF NOT EXISTS oura_raw.{table} ({schema});")
-        return 0
-    if "partition_date" not in df.columns:
-        df = df.with_columns(
-            pl.lit(str(day)).str.strptime(pl.Date, strict=False).alias("partition_date")
-        )
-    con.register("tmp_df", df.to_arrow())
-    con.execute(
-        f"CREATE TABLE IF NOT EXISTS oura_raw.{table} AS SELECT * FROM tmp_df WHERE 1=0;"
+
+    cursor = con.cursor()
+    cursor.execute(
+        f"CREATE TABLE IF NOT EXISTS oura_raw.{table} "
+        f"(raw_data VARIANT, partition_date DATE)"
     )
-    con.execute(f"DELETE FROM oura_raw.{table} WHERE partition_date = ?", [day])
-    con.execute(f"INSERT INTO oura_raw.{table} SELECT * FROM tmp_df;")
-    con.unregister("tmp_df")
-    return df.height
+    cursor.execute(
+        f"DELETE FROM oura_raw.{table} WHERE partition_date = %s",
+        (day,),
+    )
+
+    row_list = list(rows) if rows else []
+    if not row_list:
+        return 0
+
+    # Stage as VARCHAR via executemany (fast bulk insert), then
+    # convert to VARIANT in one shot — avoids per-row round trips
+    # which cause heartrate (~2000 rows/day) to hang.
+    cursor.execute("CREATE TEMPORARY TABLE _tmp_load (json_str VARCHAR, dt DATE)")
+    cursor.executemany(
+        "INSERT INTO _tmp_load VALUES (%s, %s)",
+        [(json.dumps(row), day) for row in row_list],
+    )
+    cursor.execute(
+        f"INSERT INTO oura_raw.{table} (raw_data, partition_date) "
+        f"SELECT PARSE_JSON(json_str), dt FROM _tmp_load"
+    )
+    cursor.execute("DROP TABLE _tmp_load")
+    return len(row_list)
 
 
 # ---------------------------------------------------------------------------
@@ -182,14 +108,14 @@ def _make_daily_asset(kind: str) -> Callable:
         partitions_def=partitions,
         key=dg.AssetKey(["oura_raw", kind]),
         group_name="oura_raw_daily",
-        kinds={"duckdb", "API"},
+        kinds={"snowflake", "API"},
     )
     def _asset(
         context: dg.AssetExecutionContext,
         oura_api: OuraAPI,
-        duckdb: DuckDBResource,
+        snowflake: SnowflakeResource,
     ) -> dg.MaterializeResult:
-        con = duckdb.get_connection()
+        con = snowflake.get_connection()
         day = _day(context)
         rows = oura_api.fetch_daily(kind, day, day)
         count = _upsert_day(con, kind, rows, day)
@@ -213,14 +139,14 @@ def _make_granular_asset(table: str, fetch_method: str) -> Callable:
         partitions_def=partitions,
         key=dg.AssetKey(["oura_raw", table]),
         group_name="oura_raw",
-        kinds={"duckdb", "API"},
+        kinds={"snowflake", "API"},
     )
     def _asset(
         context: dg.AssetExecutionContext,
         oura_api: OuraAPI,
-        duckdb: DuckDBResource,
+        snowflake: SnowflakeResource,
     ) -> dg.MaterializeResult:
-        con = duckdb.get_connection()
+        con = snowflake.get_connection()
         day = _day(context)
         rows = getattr(oura_api, fetch_method)(day, day)
         count = _upsert_day(con, table, rows, day)

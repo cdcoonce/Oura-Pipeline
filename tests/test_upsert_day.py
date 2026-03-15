@@ -1,133 +1,134 @@
-import duckdb
-import pytest
+"""Tests for _upsert_day() with Snowflake backend."""
+
 from datetime import date
 
-from dagster_project.defs.assets import _upsert_day, VALID_TABLES
+import pytest
 
+from dagster_project.defs.assets import _upsert_day
 
-@pytest.fixture()
-def con():
-    """In-memory DuckDB connection, closed after each test."""
-    connection = duckdb.connect()
-    yield connection
-    connection.close()
-
-
-DAY = date(2025, 3, 10)
+pytestmark = pytest.mark.skipif(
+    "SNOWFLAKE_ACCOUNT" not in __import__("os").environ,
+    reason="Snowflake credentials not available",
+)
 
 
 class TestUpsertDayInsert:
-    """Inserting rows creates the table and inserts data correctly."""
+    """Basic insert operations."""
 
-    def test_creates_table_and_inserts_rows(self, con):
+    def test_creates_table_and_inserts_rows(self, snowflake_con):
+        rows = [{"id": "abc", "score": 85, "day": "2024-06-01"}]
+        count = _upsert_day(snowflake_con, "sleep", rows, date(2024, 6, 1))
+
+        assert count == 1
+        cursor = snowflake_con.cursor()
+        cursor.execute("SELECT COUNT(*) FROM oura_raw.sleep")
+        assert cursor.fetchone()[0] == 1
+
+    def test_return_value_matches_row_count(self, snowflake_con):
         rows = [
-            {"id": "abc", "score": 80},
-            {"id": "def", "score": 92},
+            {"id": f"r{i}", "bpm": 60 + i, "timestamp": "2024-06-01T00:00:00"}
+            for i in range(5)
         ]
-        count = _upsert_day(con, "sleep", rows, DAY)
-
-        assert count == 2
-        result = con.execute("SELECT * FROM oura_raw.sleep ORDER BY id").fetchall()
-        assert len(result) == 2
-        assert result[0][0] == "abc"
-        assert result[1][0] == "def"
-
-    def test_return_value_matches_row_count(self, con):
-        rows = [{"id": str(i)} for i in range(5)]
-        count = _upsert_day(con, "activity", rows, DAY)
+        count = _upsert_day(snowflake_con, "heartrate", rows, date(2024, 6, 1))
         assert count == 5
+
+        cursor = snowflake_con.cursor()
+        cursor.execute("SELECT COUNT(*) FROM oura_raw.heartrate")
+        assert cursor.fetchone()[0] == 5
+
+    def test_raw_data_is_valid_json(self, snowflake_con):
+        """Verify raw_data is stored as parseable VARIANT."""
+        rows = [{"id": "x1", "score": 90, "day": "2024-06-01"}]
+        _upsert_day(snowflake_con, "sleep", rows, date(2024, 6, 1))
+
+        cursor = snowflake_con.cursor()
+        cursor.execute(
+            "SELECT raw_data:id::varchar, raw_data:score::int FROM oura_raw.sleep"
+        )
+        row = cursor.fetchone()
+        assert row[0] == "x1"
+        assert row[1] == 90
 
 
 class TestUpsertDayEmpty:
-    """Empty rows returns 0 and creates an empty table stub."""
+    """Empty input handling."""
 
-    def test_empty_list_returns_zero(self, con):
-        count = _upsert_day(con, "sleep", [], DAY)
+    def test_empty_list_returns_zero(self, snowflake_con):
+        count = _upsert_day(snowflake_con, "sleep", [], date(2024, 6, 1))
         assert count == 0
 
-    def test_empty_list_creates_table_with_full_schema(self, con):
-        _upsert_day(con, "sleep", [], DAY)
-        cols = con.execute(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_schema = 'oura_raw' AND table_name = 'sleep'"
-        ).fetchall()
-        col_names = [c[0] for c in cols]
-        assert "partition_date" in col_names
-        assert "id" in col_names
-        assert "score" in col_names
-        assert "contributors" in col_names
+    def test_empty_creates_table(self, snowflake_con):
+        _upsert_day(snowflake_con, "activity", [], date(2024, 6, 1))
 
-    def test_empty_table_has_no_rows(self, con):
-        _upsert_day(con, "sleep", [], DAY)
-        result = con.execute("SELECT COUNT(*) FROM oura_raw.sleep").fetchone()
-        assert result[0] == 0
+        cursor = snowflake_con.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_schema = 'OURA_RAW' AND table_name = 'ACTIVITY'"
+        )
+        assert cursor.fetchone()[0] == 1
+
+    def test_none_rows_returns_zero(self, snowflake_con):
+        count = _upsert_day(snowflake_con, "sleep", None, date(2024, 6, 1))
+        assert count == 0
 
 
 class TestUpsertDayIdempotent:
-    """Re-running for the same day replaces data, not duplicates."""
+    """DELETE + INSERT idempotency."""
 
-    def test_same_day_replaces_rows(self, con):
-        rows_v1 = [{"id": "abc", "score": 80}]
-        rows_v2 = [{"id": "abc", "score": 99}]
+    def test_same_day_replaces_rows(self, snowflake_con):
+        day = date(2024, 6, 1)
+        _upsert_day(snowflake_con, "sleep", [{"id": "old"}], day)
+        _upsert_day(snowflake_con, "sleep", [{"id": "new"}], day)
 
-        _upsert_day(con, "sleep", rows_v1, DAY)
-        _upsert_day(con, "sleep", rows_v2, DAY)
+        cursor = snowflake_con.cursor()
+        cursor.execute("SELECT raw_data:id::varchar FROM oura_raw.sleep")
+        ids = [r[0] for r in cursor.fetchall()]
+        assert ids == ["new"]
 
-        result = con.execute("SELECT * FROM oura_raw.sleep").fetchall()
-        assert len(result) == 1
-        assert result[0][1] == 99  # score updated
+    def test_different_days_coexist(self, snowflake_con):
+        _upsert_day(snowflake_con, "sleep", [{"id": "d1"}], date(2024, 6, 1))
+        _upsert_day(snowflake_con, "sleep", [{"id": "d2"}], date(2024, 6, 2))
 
-    def test_different_days_coexist(self, con):
-        day1 = date(2025, 3, 10)
-        day2 = date(2025, 3, 11)
+        cursor = snowflake_con.cursor()
+        cursor.execute("SELECT COUNT(*) FROM oura_raw.sleep")
+        assert cursor.fetchone()[0] == 2
 
-        _upsert_day(con, "sleep", [{"id": "a"}], day1)
-        _upsert_day(con, "sleep", [{"id": "b"}], day2)
+    def test_rerun_does_not_duplicate(self, snowflake_con):
+        day = date(2024, 6, 1)
+        row = [{"id": "same"}]
+        _upsert_day(snowflake_con, "sleep", row, day)
+        _upsert_day(snowflake_con, "sleep", row, day)
+        _upsert_day(snowflake_con, "sleep", row, day)
 
-        result = con.execute("SELECT COUNT(*) FROM oura_raw.sleep").fetchone()
-        assert result[0] == 2
-
-    def test_rerun_does_not_duplicate(self, con):
-        rows = [{"id": "x", "value": 1}]
-        _upsert_day(con, "sleep", rows, DAY)
-        _upsert_day(con, "sleep", rows, DAY)
-        _upsert_day(con, "sleep", rows, DAY)
-
-        result = con.execute("SELECT COUNT(*) FROM oura_raw.sleep").fetchone()
-        assert result[0] == 1
+        cursor = snowflake_con.cursor()
+        cursor.execute("SELECT COUNT(*) FROM oura_raw.sleep")
+        assert cursor.fetchone()[0] == 1
 
 
 class TestUpsertDayPartitionDate:
-    """partition_date column is automatically added if not present."""
+    """Partition date injection."""
 
-    def test_adds_partition_date_column(self, con):
-        rows = [{"id": "abc", "score": 80}]
-        _upsert_day(con, "sleep", rows, DAY)
+    def test_adds_partition_date(self, snowflake_con):
+        day = date(2024, 6, 15)
+        _upsert_day(snowflake_con, "sleep", [{"id": "p1"}], day)
 
-        result = con.execute("SELECT partition_date FROM oura_raw.sleep").fetchone()
-        assert result[0] == DAY
-
-    def test_preserves_existing_partition_date(self, con):
-        explicit_day = date(2025, 1, 1)
-        rows = [{"id": "abc", "partition_date": explicit_day}]
-        _upsert_day(con, "sleep", rows, DAY)
-
-        result = con.execute("SELECT partition_date FROM oura_raw.sleep").fetchone()
-        assert result[0] == explicit_day
+        cursor = snowflake_con.cursor()
+        cursor.execute("SELECT partition_date FROM oura_raw.sleep")
+        assert cursor.fetchone()[0] == day
 
 
 class TestUpsertDayInvalidTable:
-    """Invalid table name raises ValueError."""
+    """Table name validation (SQL injection guard)."""
 
-    def test_invalid_table_raises_value_error(self, con):
+    def test_invalid_table_raises(self, snowflake_con):
         with pytest.raises(ValueError, match="Invalid table name"):
-            _upsert_day(con, "not_a_table", [{"id": 1}], DAY)
+            _upsert_day(snowflake_con, "not_a_table", [{"x": 1}], date(2024, 6, 1))
 
-    def test_sql_injection_attempt_raises(self, con):
+    def test_sql_injection_attempt(self, snowflake_con):
         with pytest.raises(ValueError, match="Invalid table name"):
-            _upsert_day(con, "sleep; DROP TABLE oura_raw.sleep", [], DAY)
-
-    def test_all_valid_tables_accepted(self, con):
-        """Smoke test: every table in VALID_TABLES is accepted without error."""
-        for table in VALID_TABLES:
-            _upsert_day(con, table, [], DAY)
+            _upsert_day(
+                snowflake_con,
+                "sleep; DROP TABLE oura_raw.sleep; --",
+                [{"x": 1}],
+                date(2024, 6, 1),
+            )

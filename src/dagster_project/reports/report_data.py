@@ -1,17 +1,17 @@
 """Data fetching functions for health report generation.
 
-Queries DuckDB mart and staging tables for a given date range
+Queries Snowflake mart and staging tables for a given date range
 and returns typed Polars DataFrames.
 """
 
 from datetime import date
 
 import polars as pl
-from duckdb import DuckDBPyConnection
+import snowflake.connector
 
 
 def fetch_wellness_for_period(
-    con: DuckDBPyConnection,
+    con: snowflake.connector.SnowflakeConnection,
     start_date: date,
     end_date: date,
 ) -> pl.DataFrame:
@@ -23,8 +23,8 @@ def fetch_wellness_for_period(
 
     Parameters
     ----------
-    con : DuckDBPyConnection
-        Active DuckDB connection.
+    con : SnowflakeConnection
+        Active Snowflake connection.
     start_date : date
         Period start (inclusive).
     end_date : date
@@ -39,18 +39,19 @@ def fetch_wellness_for_period(
         sleep_recovery_score, daytime_recovery_score, resilience_stress_score.
         Empty DataFrame with correct schema if no rows match.
     """
-    sql = """
-        SELECT *
-        FROM oura_marts.fact_daily_wellness
-        WHERE day BETWEEN ? AND ?
-        ORDER BY day
-    """
-    result = con.execute(sql, [start_date, end_date])
-    return pl.from_arrow(result.fetch_arrow_table())
+    cursor = con.cursor()
+    cursor.execute(
+        "SELECT * FROM oura_marts.fact_daily_wellness "
+        "WHERE day BETWEEN %s AND %s ORDER BY day",
+        (start_date, end_date),
+    )
+    pdf = cursor.fetch_pandas_all()
+    pdf.columns = [c.lower() for c in pdf.columns]
+    return pl.from_pandas(pdf)
 
 
 def fetch_sleep_detail_for_period(
-    con: DuckDBPyConnection,
+    con: snowflake.connector.SnowflakeConnection,
     start_date: date,
     end_date: date,
 ) -> pl.DataFrame:
@@ -63,8 +64,8 @@ def fetch_sleep_detail_for_period(
 
     Parameters
     ----------
-    con : DuckDBPyConnection
-        Active DuckDB connection.
+    con : SnowflakeConnection
+        Active Snowflake connection.
     start_date : date
         Period start (inclusive).
     end_date : date
@@ -81,18 +82,19 @@ def fetch_sleep_detail_for_period(
         optimal_bedtime_end_offset.
         Empty DataFrame with correct schema if no rows match.
     """
-    sql = """
-        SELECT *
-        FROM oura_marts.fact_sleep_detail
-        WHERE day BETWEEN ? AND ?
-        ORDER BY day
-    """
-    result = con.execute(sql, [start_date, end_date])
-    return pl.from_arrow(result.fetch_arrow_table())
+    cursor = con.cursor()
+    cursor.execute(
+        "SELECT * FROM oura_marts.fact_sleep_detail "
+        "WHERE day BETWEEN %s AND %s ORDER BY day",
+        (start_date, end_date),
+    )
+    pdf = cursor.fetch_pandas_all()
+    pdf.columns = [c.lower() for c in pdf.columns]
+    return pl.from_pandas(pdf)
 
 
 def fetch_workout_summary_for_period(
-    con: DuckDBPyConnection,
+    con: snowflake.connector.SnowflakeConnection,
     start_date: date,
     end_date: date,
 ) -> pl.DataFrame:
@@ -104,8 +106,8 @@ def fetch_workout_summary_for_period(
 
     Parameters
     ----------
-    con : DuckDBPyConnection
-        Active DuckDB connection.
+    con : SnowflakeConnection
+        Active Snowflake connection.
     start_date : date
         Period start (inclusive).
     end_date : date
@@ -119,11 +121,12 @@ def fetch_workout_summary_for_period(
         workout_label, partition_date.
         Empty DataFrame with correct schema if no rows match.
     """
-    sql = """
-        SELECT *
-        FROM oura_staging.stg_workouts
-        WHERE day BETWEEN ? AND ?
-        ORDER BY day
-    """
-    result = con.execute(sql, [start_date, end_date])
-    return pl.from_arrow(result.fetch_arrow_table())
+    cursor = con.cursor()
+    cursor.execute(
+        "SELECT * FROM oura_staging.stg_workouts "
+        "WHERE day BETWEEN %s AND %s ORDER BY day",
+        (start_date, end_date),
+    )
+    pdf = cursor.fetch_pandas_all()
+    pdf.columns = [c.lower() for c in pdf.columns]
+    return pl.from_pandas(pdf)

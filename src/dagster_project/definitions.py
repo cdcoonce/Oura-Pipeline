@@ -2,7 +2,7 @@ import dagster as dg
 from dagster_dbt import DbtCliResource
 
 from .defs import assets, checks, dbt_assets, report_assets, schedules
-from .defs.resources import DuckDBResource, OuraAPI
+from .defs.resources import OuraAPI, SnowflakeResource
 from .reports.report_delivery import SESDeliveryResource
 
 
@@ -11,13 +11,25 @@ def defs():
     return dg.load_definitions_from_modules(
         modules=[assets, checks, dbt_assets, report_assets, schedules],
         resources={
+            "snowflake": SnowflakeResource(
+                account=dg.EnvVar("SNOWFLAKE_ACCOUNT"),
+                user=dg.EnvVar("SNOWFLAKE_USER"),
+                private_key=dg.EnvVar("SNOWFLAKE_PRIVATE_KEY"),
+                warehouse=dg.EnvVar("SNOWFLAKE_WAREHOUSE"),
+                database=dg.EnvVar("SNOWFLAKE_DATABASE"),
+                role=dg.EnvVar("SNOWFLAKE_ROLE"),
+            ),
             "oura_api": OuraAPI(
                 client_id=dg.EnvVar("OURA_CLIENT_ID"),
                 client_secret=dg.EnvVar("OURA_CLIENT_SECRET"),
-                token_path=dg.EnvVar("OURA_TOKEN_PATH"),
-            ),
-            "duckdb": DuckDBResource(
-                db_path=dg.EnvVar("DUCKDB_PATH"),
+                snowflake=SnowflakeResource(
+                    account=dg.EnvVar("SNOWFLAKE_ACCOUNT"),
+                    user=dg.EnvVar("SNOWFLAKE_USER"),
+                    private_key=dg.EnvVar("SNOWFLAKE_PRIVATE_KEY"),
+                    warehouse=dg.EnvVar("SNOWFLAKE_WAREHOUSE"),
+                    database=dg.EnvVar("SNOWFLAKE_DATABASE"),
+                    role=dg.EnvVar("SNOWFLAKE_ROLE"),
+                ),
             ),
             "dbt": DbtCliResource(
                 project_dir=dbt_assets.DBT_PROJECT_DIR,

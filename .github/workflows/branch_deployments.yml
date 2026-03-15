@@ -54,10 +54,17 @@ jobs:
         if: steps.prerun.outputs.result == 'pex-deploy'
         run: |
           cd project-repo
-          pip install dbt-core dbt-duckdb
+          pip install dbt-core dbt-snowflake
           cd dbt_oura
           dbt deps
           dbt parse --profiles-dir .
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
 
       - name: Python Executable Deploy
         if: steps.prerun.outputs.result == 'pex-deploy'

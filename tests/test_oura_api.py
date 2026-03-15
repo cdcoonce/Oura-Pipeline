@@ -152,10 +152,9 @@ class TestGetAccessToken:
 
 
 class TestGetHttpErrorHandling:
-    """_get returns empty dict on HTTP errors instead of raising."""
+    """_get handles HTTP errors based on status code severity."""
 
-    def test_http_error_returns_empty_dict(self, caplog):
-        """A 4xx/5xx response returns {} and logs a warning."""
+    def _make_api_with_valid_token(self):
         now = int(time.time())
         tokens = {
             "access_token": "valid_token",
@@ -165,14 +164,24 @@ class TestGetHttpErrorHandling:
         }
         api = _make_api()
         api._load_tokens = MagicMock(return_value=tokens)
+        return api
 
+    def _mock_http_error(self, status_code: int, body: str = "error"):
         mock_resp = MagicMock()
+        mock_resp.status_code = status_code
+        mock_resp.text = body
         mock_resp.raise_for_status.side_effect = requests.HTTPError(
-            response=MagicMock(status_code=404)
+            response=MagicMock(status_code=status_code)
         )
+        return mock_resp
+
+    def test_404_returns_empty_dict(self, caplog):
+        """A 404 returns {} and logs a warning (non-critical client error)."""
+        api = self._make_api_with_valid_token()
 
         with patch(
-            "dagster_project.defs.resources.requests.get", return_value=mock_resp
+            "dagster_project.defs.resources.requests.get",
+            return_value=self._mock_http_error(404, "Not Found"),
         ):
             with caplog.at_level(logging.WARNING):
                 result = api._get(
@@ -180,10 +189,72 @@ class TestGetHttpErrorHandling:
                 )
 
         assert result == {}
-        assert "returned HTTP error" in caplog.text
+        assert "treating as empty data" in caplog.text
 
-    def test_fetch_daily_returns_empty_on_http_error(self):
-        """fetch_daily returns empty list when API returns an HTTP error."""
+    def test_401_raises_runtime_error(self):
+        """A 401 raises RuntimeError — auth errors must not be silent."""
+        api = self._make_api_with_valid_token()
+
+        with patch(
+            "dagster_project.defs.resources.requests.get",
+            return_value=self._mock_http_error(401, "Unauthorized"),
+        ):
+            with pytest.raises(RuntimeError, match="auth error"):
+                api._get("/v2/usercollection/daily_sleep", {"start_date": "2025-01-01"})
+
+    def test_403_raises_runtime_error(self):
+        """A 403 raises RuntimeError — forbidden must not be silent."""
+        api = self._make_api_with_valid_token()
+
+        with patch(
+            "dagster_project.defs.resources.requests.get",
+            return_value=self._mock_http_error(403, "Forbidden"),
+        ):
+            with pytest.raises(RuntimeError, match="auth error"):
+                api._get("/v2/usercollection/daily_sleep", {"start_date": "2025-01-01"})
+
+    def test_429_raises_runtime_error(self):
+        """A 429 raises RuntimeError — rate limits should trigger retry."""
+        api = self._make_api_with_valid_token()
+
+        with patch(
+            "dagster_project.defs.resources.requests.get",
+            return_value=self._mock_http_error(429, "Too Many Requests"),
+        ):
+            with pytest.raises(RuntimeError, match="rate limited"):
+                api._get("/v2/usercollection/daily_sleep", {"start_date": "2025-01-01"})
+
+    def test_500_raises_runtime_error(self):
+        """A 500 raises RuntimeError — server errors should trigger retry."""
+        api = self._make_api_with_valid_token()
+
+        with patch(
+            "dagster_project.defs.resources.requests.get",
+            return_value=self._mock_http_error(500, "Internal Server Error"),
+        ):
+            with pytest.raises(RuntimeError, match="server error"):
+                api._get("/v2/usercollection/daily_sleep", {"start_date": "2025-01-01"})
+
+    def test_fetch_daily_returns_empty_on_404(self):
+        """fetch_daily returns empty list when API returns a 404."""
+        from datetime import date
+
+        api = self._make_api_with_valid_token()
+
+        with patch(
+            "dagster_project.defs.resources.requests.get",
+            return_value=self._mock_http_error(404, "Not Found"),
+        ):
+            result = api.fetch_daily("sleep", date(2025, 1, 1), date(2025, 1, 1))
+
+        assert result == []
+
+
+class TestExclusiveEndDateAdjustment:
+    """Endpoints with exclusive end_date get +1 day so single-day queries work."""
+
+    def test_exclusive_daily_endpoint_adjusts_end_date(self):
+        """fetch_daily adds +1 day for exclusive endpoints like daily_activity."""
         from datetime import date
 
         now = int(time.time())
@@ -197,13 +268,112 @@ class TestGetHttpErrorHandling:
         api._load_tokens = MagicMock(return_value=tokens)
 
         mock_resp = MagicMock()
-        mock_resp.raise_for_status.side_effect = requests.HTTPError(
-            response=MagicMock(status_code=404)
-        )
+        mock_resp.ok = True
+        mock_resp.json.return_value = {"data": [{"id": "activity_1"}]}
+        mock_resp.raise_for_status = MagicMock()
 
         with patch(
             "dagster_project.defs.resources.requests.get", return_value=mock_resp
-        ):
-            result = api.fetch_daily("sleep", date(2025, 1, 1), date(2025, 1, 1))
+        ) as mock_get:
+            api.fetch_daily("activity", date(2026, 3, 14), date(2026, 3, 14))
 
-        assert result == []
+        _, kwargs = mock_get.call_args
+        assert kwargs["params"]["end_date"] == date(2026, 3, 15)
+        assert kwargs["params"]["start_date"] == date(2026, 3, 14)
+
+    def test_inclusive_daily_endpoint_keeps_end_date(self):
+        """fetch_daily does NOT adjust end_date for inclusive endpoints like daily_sleep."""
+        from datetime import date
+
+        now = int(time.time())
+        tokens = {
+            "access_token": "valid_token",
+            "refresh_token": "refresh",
+            "expires_in": 86400,
+            "obtained_at": now,
+        }
+        api = _make_api()
+        api._load_tokens = MagicMock(return_value=tokens)
+
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {"data": [{"id": "sleep_1"}]}
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch(
+            "dagster_project.defs.resources.requests.get", return_value=mock_resp
+        ) as mock_get:
+            api.fetch_daily("sleep", date(2026, 3, 14), date(2026, 3, 14))
+
+        _, kwargs = mock_get.call_args
+        assert kwargs["params"]["end_date"] == date(2026, 3, 14)
+
+    def test_exclusive_granular_endpoint_adjusts_end_date(self):
+        """Granular fetch methods adjust end_date for exclusive endpoints."""
+        from datetime import date
+
+        now = int(time.time())
+        tokens = {
+            "access_token": "valid_token",
+            "refresh_token": "refresh",
+            "expires_in": 86400,
+            "obtained_at": now,
+        }
+        api = _make_api()
+        api._load_tokens = MagicMock(return_value=tokens)
+
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {"data": [{"id": "workout_1"}]}
+        mock_resp.raise_for_status = MagicMock()
+
+        exclusive_methods = [
+            ("fetch_sleep_periods", date(2026, 3, 15)),
+            ("fetch_workouts", date(2026, 3, 15)),
+            ("fetch_sessions", date(2026, 3, 15)),
+            ("fetch_tags", date(2026, 3, 15)),
+            ("fetch_rest_mode_periods", date(2026, 3, 15)),
+        ]
+
+        for method_name, expected_end in exclusive_methods:
+            with patch(
+                "dagster_project.defs.resources.requests.get", return_value=mock_resp
+            ) as mock_get:
+                getattr(api, method_name)(date(2026, 3, 14), date(2026, 3, 14))
+
+            _, kwargs = mock_get.call_args
+            assert kwargs["params"]["end_date"] == expected_end, (
+                f"{method_name} should adjust end_date to {expected_end}"
+            )
+
+    def test_inclusive_granular_endpoint_keeps_end_date(self):
+        """Inclusive granular endpoints (heartrate, sleep_time) keep end_date as-is."""
+        from datetime import date
+
+        now = int(time.time())
+        tokens = {
+            "access_token": "valid_token",
+            "refresh_token": "refresh",
+            "expires_in": 86400,
+            "obtained_at": now,
+        }
+        api = _make_api()
+        api._load_tokens = MagicMock(return_value=tokens)
+
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {"data": [{"id": "hr_1"}]}
+        mock_resp.raise_for_status = MagicMock()
+
+        inclusive_methods = ["fetch_heartrate", "fetch_sleep_time"]
+
+        for method_name in inclusive_methods:
+            with patch(
+                "dagster_project.defs.resources.requests.get", return_value=mock_resp
+            ) as mock_get:
+                getattr(api, method_name)(date(2026, 3, 14), date(2026, 3, 14))
+
+            _, kwargs = mock_get.call_args
+            assert kwargs["params"]["end_date"] == date(2026, 3, 14), (
+                f"{method_name} should NOT adjust end_date"
+            )

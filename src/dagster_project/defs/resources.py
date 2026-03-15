@@ -3,7 +3,7 @@ import base64
 import json
 import logging
 import time
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Dict, Iterable
 
 import dagster as dg
@@ -30,6 +30,21 @@ DAILY_MAP = {
     "stress": "daily_stress",
     "resilience": "daily_resilience",
 }
+
+# Oura API endpoints that treat end_date as exclusive (data up to but NOT
+# including end_date). When start_date == end_date these return zero rows.
+# Fix: pass end_date = start_date + 1 day so a single-day query works.
+EXCLUSIVE_END_DATE_ENDPOINTS = frozenset(
+    {
+        "daily_activity",
+        "daily_resilience",
+        "sleep",  # sleep periods (granular)
+        "workout",
+        "session",
+        "tag",
+        "rest_mode_period",
+    }
+)
 
 
 class SnowflakeResource(dg.ConfigurableResource):
@@ -161,13 +176,51 @@ class OuraAPI(dg.ConfigurableResource):
         try:
             response.raise_for_status()
         except requests.HTTPError:
-            logger.warning(
-                "%s returned HTTP error %s — returning empty data",
+            status = response.status_code
+            body = response.text[:500]
+            logger.error(
+                "%s returned HTTP %s — body: %s",
                 path,
-                response.status_code,
+                status,
+                body,
+            )
+            # Auth errors should fail loudly so they're not masked
+            if status in (401, 403):
+                raise RuntimeError(
+                    f"Oura API auth error on {path} (HTTP {status}): {body}. "
+                    "Check OAuth token scopes and refresh token validity."
+                )
+            # Rate limiting — raise so Dagster can retry the partition
+            if status == 429:
+                raise RuntimeError(
+                    f"Oura API rate limited on {path} (HTTP 429): {body}"
+                )
+            # Server errors — raise for Dagster retry
+            if status >= 500:
+                raise RuntimeError(
+                    f"Oura API server error on {path} (HTTP {status}): {body}"
+                )
+            # Other client errors (404, 422, etc.) — log and return empty
+            logger.warning(
+                "%s returned HTTP %s — treating as empty data",
+                path,
+                status,
             )
             return {}
         return response.json()
+
+    # ----- date helpers -----
+    @staticmethod
+    def _end_date_for(endpoint: str, end: date) -> date:
+        """Adjust end_date for endpoints that treat it as exclusive.
+
+        Some Oura v2 endpoints use an exclusive end_date — a query with
+        start_date == end_date returns zero rows.  For those endpoints we
+        add one day so single-day partition queries return the expected data.
+        """
+        if endpoint in EXCLUSIVE_END_DATE_ENDPOINTS:
+            return end + timedelta(days=1)
+        return end
 
     # ----- public API (daily) -----
     def fetch_daily(
@@ -176,42 +229,51 @@ class OuraAPI(dg.ConfigurableResource):
         endpoint = DAILY_MAP.get(kind, kind)
         return self._get(
             f"/v2/usercollection/{endpoint}",
-            {"start_date": start, "end_date": end},
+            {"start_date": start, "end_date": self._end_date_for(endpoint, end)},
         ).get("data", [])
 
     # ----- public API (granular / event-level) -----
     def fetch_heartrate(self, start: date, end: date) -> list[Dict[str, Any]]:
         return self._get(
-            "/v2/usercollection/heartrate", {"start_date": start, "end_date": end}
+            "/v2/usercollection/heartrate",
+            {"start_date": start, "end_date": self._end_date_for("heartrate", end)},
         ).get("data", [])
 
     def fetch_sleep_periods(self, start: date, end: date) -> list[Dict[str, Any]]:
         return self._get(
-            "/v2/usercollection/sleep", {"start_date": start, "end_date": end}
+            "/v2/usercollection/sleep",
+            {"start_date": start, "end_date": self._end_date_for("sleep", end)},
         ).get("data", [])
 
     def fetch_sleep_time(self, start: date, end: date) -> list[Dict[str, Any]]:
         return self._get(
-            "/v2/usercollection/sleep_time", {"start_date": start, "end_date": end}
+            "/v2/usercollection/sleep_time",
+            {"start_date": start, "end_date": self._end_date_for("sleep_time", end)},
         ).get("data", [])
 
     def fetch_workouts(self, start: date, end: date) -> list[Dict[str, Any]]:
         return self._get(
-            "/v2/usercollection/workout", {"start_date": start, "end_date": end}
+            "/v2/usercollection/workout",
+            {"start_date": start, "end_date": self._end_date_for("workout", end)},
         ).get("data", [])
 
     def fetch_sessions(self, start: date, end: date) -> list[Dict[str, Any]]:
         return self._get(
-            "/v2/usercollection/session", {"start_date": start, "end_date": end}
+            "/v2/usercollection/session",
+            {"start_date": start, "end_date": self._end_date_for("session", end)},
         ).get("data", [])
 
     def fetch_tags(self, start: date, end: date) -> list[Dict[str, Any]]:
         return self._get(
-            "/v2/usercollection/tag", {"start_date": start, "end_date": end}
+            "/v2/usercollection/tag",
+            {"start_date": start, "end_date": self._end_date_for("tag", end)},
         ).get("data", [])
 
     def fetch_rest_mode_periods(self, start: date, end: date) -> list[Dict[str, Any]]:
         return self._get(
             "/v2/usercollection/rest_mode_period",
-            {"start_date": start, "end_date": end},
+            {
+                "start_date": start,
+                "end_date": self._end_date_for("rest_mode_period", end),
+            },
         ).get("data", [])

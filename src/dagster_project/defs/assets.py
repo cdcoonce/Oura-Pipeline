@@ -80,12 +80,19 @@ def _upsert_day(
     if not row_list:
         return 0
 
-    for row in row_list:
-        cursor.execute(
-            f"INSERT INTO oura_raw.{table} (raw_data, partition_date) "
-            f"SELECT PARSE_JSON(%s), %s",
-            (json.dumps(row), day),
-        )
+    # Stage as VARCHAR via executemany (fast bulk insert), then
+    # convert to VARIANT in one shot — avoids per-row round trips
+    # which cause heartrate (~2000 rows/day) to hang.
+    cursor.execute("CREATE TEMPORARY TABLE _tmp_load (json_str VARCHAR, dt DATE)")
+    cursor.executemany(
+        "INSERT INTO _tmp_load VALUES (%s, %s)",
+        [(json.dumps(row), day) for row in row_list],
+    )
+    cursor.execute(
+        f"INSERT INTO oura_raw.{table} (raw_data, partition_date) "
+        f"SELECT PARSE_JSON(json_str), dt FROM _tmp_load"
+    )
+    cursor.execute("DROP TABLE _tmp_load")
     return len(row_list)
 
 

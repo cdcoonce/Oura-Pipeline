@@ -224,3 +224,7 @@ data/raw/*.parquet
 # Snowflake
 snowflake_key.p8
 snowflake_key.pub
+
+# Claude Code MCP config
+.mcp.json
+snowflake_mcp_config.yaml

@@ -46,7 +46,7 @@ Write implementation plans to `docs/plans/{file_name}.md` before starting non-tr
 
 Skills live in `.claude/skills/`. Each `SKILL.md` defines an invocable skill with trigger conditions.
 
-### `/code-review`
+### `/daa-code-review`
 
 **Trigger when:** user asks for a "code review", "quality check", pre-commit review, or wants code analyzed for issues.
 **Output:** Save markdown report to `docs/code_reviews/{YYYY-MM-DD}_{file_name}.md`.

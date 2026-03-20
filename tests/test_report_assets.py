@@ -2,7 +2,6 @@ import calendar
 from datetime import date
 
 import dagster as dg
-import pytest
 
 from dagster_project.defs.report_assets import (
     _previous_month_range,
@@ -62,16 +61,16 @@ class TestScheduleConfiguration:
     """Tests for schedule definitions."""
 
     def test_weekly_schedule_cron(self):
-        """Weekly schedule should run Monday 7 AM UTC."""
+        """Weekly schedule should run Monday 17:00 UTC (10 AM MST)."""
         from dagster_project.defs.schedules import weekly_report_schedule
 
-        assert weekly_report_schedule.cron_schedule == "0 7 * * 1"
+        assert weekly_report_schedule.cron_schedule == "0 17 * * 1"
 
     def test_monthly_schedule_cron(self):
-        """Monthly schedule should run 1st of month 7 AM UTC."""
+        """Monthly schedule should run 1st of month 17:00 UTC (10 AM MST)."""
         from dagster_project.defs.schedules import monthly_report_schedule
 
-        assert monthly_report_schedule.cron_schedule == "0 7 1 * *"
+        assert monthly_report_schedule.cron_schedule == "0 17 1 * *"
 
     def test_schedules_default_stopped(self):
         """Both schedules should start in STOPPED state."""
@@ -80,13 +79,9 @@ class TestScheduleConfiguration:
             weekly_report_schedule,
         )
 
+        assert weekly_report_schedule.default_status == dg.DefaultScheduleStatus.STOPPED
         assert (
-            weekly_report_schedule.default_status
-            == dg.DefaultScheduleStatus.STOPPED
-        )
-        assert (
-            monthly_report_schedule.default_status
-            == dg.DefaultScheduleStatus.STOPPED
+            monthly_report_schedule.default_status == dg.DefaultScheduleStatus.STOPPED
         )
 
 

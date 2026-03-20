@@ -31,12 +31,12 @@ monthly_report_job = dg.define_asset_job(
 
 weekly_report_schedule = dg.ScheduleDefinition(
     job=weekly_report_job,
-    cron_schedule="0 7 * * 1",  # Monday 7 AM UTC
+    cron_schedule="0 17 * * 1",  # Monday 10 AM MST (after daily job)
     default_status=dg.DefaultScheduleStatus.STOPPED,
 )
 
 monthly_report_schedule = dg.ScheduleDefinition(
     job=monthly_report_job,
-    cron_schedule="0 7 1 * *",  # 1st of month 7 AM UTC
+    cron_schedule="0 17 1 * *",  # 1st of month 10 AM MST (after daily job)
     default_status=dg.DefaultScheduleStatus.STOPPED,
 )

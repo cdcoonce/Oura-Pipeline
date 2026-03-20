@@ -2,7 +2,12 @@
 
 import dagster as dg
 
-from dagster_project.defs.schedules import daily_oura_job, daily_oura_schedule
+from dagster_project.defs.schedules import (
+    daily_oura_job,
+    daily_oura_schedule,
+    monthly_report_schedule,
+    weekly_report_schedule,
+)
 
 
 class TestDailyOuraSchedule:
@@ -22,3 +27,11 @@ class TestDailyOuraSchedule:
             "marts",
         )
         assert daily_oura_job.selection == expected
+
+
+class TestReportSchedules:
+    def test_weekly_report_runs_after_daily_job(self) -> None:
+        assert weekly_report_schedule.cron_schedule == "0 17 * * 1"
+
+    def test_monthly_report_runs_after_daily_job(self) -> None:
+        assert monthly_report_schedule.cron_schedule == "0 17 1 * *"

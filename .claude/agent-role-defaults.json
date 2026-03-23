@@ -1,0 +1,8 @@
+{
+  "implementer": {
+    "skills": ["tdd", "commit"]
+  },
+  "reviewer": {
+    "skills": ["daa-code-review"]
+  }
+}

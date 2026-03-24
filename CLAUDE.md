@@ -116,6 +116,19 @@ Skills live in `.claude/skills/`. Each `SKILL.md` defines an invocable skill wit
 
 **Trigger when:** user wants to create, write, or build a new Claude Code skill.
 
+### `/code-review`
+
+**Trigger when:** user asks for a "code review" or "quality check", wants code analyzed for PEP8 violations, type hints, docstrings, complexity, security issues, or wants fixes suggested and applied.
+
+### `/setup-pre-commit`
+
+**Trigger when:** user wants to add pre-commit hooks, configure commit-time linting, formatting, type checking, or testing. Triggers on "pre-commit", "git hooks", or "linting hooks".
+
+### `/dignified-python`
+
+**Trigger when:** writing or reviewing Python code and idiomatic style matters — modern type syntax, exception handling (LBYL), pathlib, ABC-based interfaces, or version-specific features (3.10–3.13). Always use for this project.
+**References:** [.claude/skills/dignified-python/](.claude/skills/dignified-python/) — core standards, CLI patterns, subprocess, module design, advanced typing, version guides.
+
 ## Project Context
 
 See [.claude/docs/project.md](.claude/docs/project.md) for project-specific details (tech stack, architecture, test markers).

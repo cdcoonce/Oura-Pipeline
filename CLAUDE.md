@@ -116,10 +116,6 @@ Skills live in `.claude/skills/`. Each `SKILL.md` defines an invocable skill wit
 
 **Trigger when:** user wants to create, write, or build a new Claude Code skill.
 
-### `/code-review`
-
-**Trigger when:** user asks for a "code review" or "quality check", wants code analyzed for PEP8 violations, type hints, docstrings, complexity, security issues, or wants fixes suggested and applied.
-
 ### `/setup-pre-commit`
 
 **Trigger when:** user wants to add pre-commit hooks, configure commit-time linting, formatting, type checking, or testing. Triggers on "pre-commit", "git hooks", or "linting hooks".

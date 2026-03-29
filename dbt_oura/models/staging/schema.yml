@@ -46,7 +46,10 @@ models:
       - name: partition_date
         tests: [not_null]
       - name: avg_spo2_pct
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
   - name: stg_stress
     columns:

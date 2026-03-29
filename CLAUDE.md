@@ -116,20 +116,6 @@ Skills live in `.claude/skills/`. Each `SKILL.md` defines an invocable skill wit
 
 **Trigger when:** user wants to create, write, or build a new Claude Code skill.
 
-### `/setup-pre-commit`
-
-**Trigger when:** user wants to add pre-commit hooks, configure commit-time linting, formatting, type checking, or testing. Triggers on "pre-commit", "git hooks", or "linting hooks".
-
-### `/dignified-python`
-
-**Trigger when:** writing or reviewing Python code and idiomatic style matters — modern type syntax, exception handling (LBYL), pathlib, ABC-based interfaces, or version-specific features (3.10–3.13). Always use for this project.
-**References:** [.claude/skills/dignified-python/](.claude/skills/dignified-python/) — core standards, CLI patterns, subprocess, module design, advanced typing, version guides.
-
-### `/dagster-expert`
-
-**Trigger when:** any task involving Dagster — assets, schedules, sensors, components, the `dg` CLI, Dagster Plus deployment, integrations (dbt, Snowflake, Polars, etc.), or debugging pipeline runs. Always use for this project.
-**References:** [.claude/skills/dagster-expert/](.claude/skills/dagster-expert/) — assets, automation, CLI, components, 40+ integration libraries.
-
 ## Project Context
 
 See [.claude/docs/project.md](.claude/docs/project.md) for project-specific details (tech stack, architecture, test markers).

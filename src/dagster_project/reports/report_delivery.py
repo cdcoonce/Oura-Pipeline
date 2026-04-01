@@ -5,7 +5,6 @@ Amazon SES, with structured error handling for delivery failures.
 """
 
 import logging
-from typing import Any
 
 import boto3
 import dagster as dg

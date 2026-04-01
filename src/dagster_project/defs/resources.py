@@ -3,8 +3,10 @@ import base64
 import json
 import logging
 import time
+from collections.abc import Generator, Iterable
+from contextlib import contextmanager
 from datetime import date, timedelta
-from typing import Any, Dict, Iterable
+from typing import Any
 
 import dagster as dg
 import requests
@@ -83,6 +85,24 @@ class SnowflakeResource(dg.ConfigurableResource):
             role=self.role,
         )
 
+    @contextmanager
+    def connection(
+        self,
+    ) -> Generator[snowflake.connector.SnowflakeConnection, None, None]:
+        """Context manager that opens and automatically closes a Snowflake connection.
+
+        Yields
+        ------
+        snowflake.connector.SnowflakeConnection
+            An open Snowflake connection. Automatically closed on exit,
+            even if an exception is raised inside the ``with`` block.
+        """
+        con = self.get_connection()
+        try:
+            yield con
+        finally:
+            con.close()
+
 
 class OuraAPI(dg.ConfigurableResource):
     """OAuth2-backed Oura API with Snowflake-backed token storage."""
@@ -91,15 +111,10 @@ class OuraAPI(dg.ConfigurableResource):
     client_secret: str
     snowflake: SnowflakeResource
 
-    def _get_token_connection(self) -> snowflake.connector.SnowflakeConnection:
-        """Get a Snowflake connection for token operations."""
-        return self.snowflake.get_connection()
-
     # ----- token helpers -----
-    def _load_tokens(self) -> Dict[str, Any]:
+    def _load_tokens(self) -> dict[str, Any]:
         """Load the most recent OAuth tokens from Snowflake."""
-        con = self._get_token_connection()
-        try:
+        with self.snowflake.connection() as con:
             cursor = con.cursor()
             cursor.execute(
                 "SELECT token_data FROM OURA.CONFIG.OAUTH_TOKENS "
@@ -115,13 +130,10 @@ class OuraAPI(dg.ConfigurableResource):
             if isinstance(token_data, str):
                 return json.loads(token_data)
             return dict(token_data)
-        finally:
-            con.close()
 
-    def _save_tokens(self, tokens: Dict[str, Any]) -> None:
+    def _save_tokens(self, tokens: dict[str, Any]) -> None:
         """Persist refreshed OAuth tokens to Snowflake."""
-        con = self._get_token_connection()
-        try:
+        with self.snowflake.connection() as con:
             cursor = con.cursor()
             cursor.execute(
                 "INSERT INTO OURA.CONFIG.OAUTH_TOKENS (token_data) "
@@ -129,10 +141,24 @@ class OuraAPI(dg.ConfigurableResource):
                 (json.dumps(tokens),),
             )
             logger.info("Saved refreshed OAuth tokens to Snowflake")
-        finally:
-            con.close()
 
     def _get_access_token(self) -> str:
+        """Retrieve a valid access token, refreshing via OAuth2 if expired.
+
+        Returns
+        -------
+        str
+            A valid Oura API access token. If the current token is still
+            valid (not within 60 seconds of expiry), it is returned directly.
+            Otherwise, a refresh grant is performed, the new tokens are
+            persisted to Snowflake, and the fresh access token is returned.
+
+        Raises
+        ------
+        RuntimeError
+            If the OAuth token refresh request fails (e.g. revoked
+            refresh token).
+        """
         tokens = self._load_tokens()
         expires_in = int(tokens.get("expires_in", 0))
         obtained_at = int(tokens.get("obtained_at", 0))
@@ -165,7 +191,7 @@ class OuraAPI(dg.ConfigurableResource):
         return refreshed_tokens["access_token"]
 
     # ----- request helper -----
-    def _get(self, path: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         access_token = self._get_access_token()
         response = requests.get(
             f"{BASE_URL}{path}",
@@ -225,7 +251,7 @@ class OuraAPI(dg.ConfigurableResource):
     # ----- public API (daily) -----
     def fetch_daily(
         self, kind: str, start: date, end: date
-    ) -> Iterable[Dict[str, Any]]:
+    ) -> Iterable[dict[str, Any]]:
         endpoint = DAILY_MAP.get(kind, kind)
         return self._get(
             f"/v2/usercollection/{endpoint}",
@@ -233,43 +259,43 @@ class OuraAPI(dg.ConfigurableResource):
         ).get("data", [])
 
     # ----- public API (granular / event-level) -----
-    def fetch_heartrate(self, start: date, end: date) -> list[Dict[str, Any]]:
+    def fetch_heartrate(self, start: date, end: date) -> list[dict[str, Any]]:
         return self._get(
             "/v2/usercollection/heartrate",
             {"start_date": start, "end_date": self._end_date_for("heartrate", end)},
         ).get("data", [])
 
-    def fetch_sleep_periods(self, start: date, end: date) -> list[Dict[str, Any]]:
+    def fetch_sleep_periods(self, start: date, end: date) -> list[dict[str, Any]]:
         return self._get(
             "/v2/usercollection/sleep",
             {"start_date": start, "end_date": self._end_date_for("sleep", end)},
         ).get("data", [])
 
-    def fetch_sleep_time(self, start: date, end: date) -> list[Dict[str, Any]]:
+    def fetch_sleep_time(self, start: date, end: date) -> list[dict[str, Any]]:
         return self._get(
             "/v2/usercollection/sleep_time",
             {"start_date": start, "end_date": self._end_date_for("sleep_time", end)},
         ).get("data", [])
 
-    def fetch_workouts(self, start: date, end: date) -> list[Dict[str, Any]]:
+    def fetch_workouts(self, start: date, end: date) -> list[dict[str, Any]]:
         return self._get(
             "/v2/usercollection/workout",
             {"start_date": start, "end_date": self._end_date_for("workout", end)},
         ).get("data", [])
 
-    def fetch_sessions(self, start: date, end: date) -> list[Dict[str, Any]]:
+    def fetch_sessions(self, start: date, end: date) -> list[dict[str, Any]]:
         return self._get(
             "/v2/usercollection/session",
             {"start_date": start, "end_date": self._end_date_for("session", end)},
         ).get("data", [])
 
-    def fetch_tags(self, start: date, end: date) -> list[Dict[str, Any]]:
+    def fetch_tags(self, start: date, end: date) -> list[dict[str, Any]]:
         return self._get(
             "/v2/usercollection/tag",
             {"start_date": start, "end_date": self._end_date_for("tag", end)},
         ).get("data", [])
 
-    def fetch_rest_mode_periods(self, start: date, end: date) -> list[Dict[str, Any]]:
+    def fetch_rest_mode_periods(self, start: date, end: date) -> list[dict[str, Any]]:
         return self._get(
             "/v2/usercollection/rest_mode_period",
             {

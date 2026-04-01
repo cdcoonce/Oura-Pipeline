@@ -17,7 +17,7 @@ AUTH_URL = "https://cloud.ouraring.com/oauth/authorize"
 TOKEN_URL = "https://api.ouraring.com/oauth/token"
 
 
-def env(name: str, required: bool = True, default: str | None = None) -> str:
+def env(name: str, required: bool = True, default: str | None = None) -> str | None:
     val = os.getenv(name, default)
     if required and not val:
         print(f"ERROR: Missing required env var: {name}", file=sys.stderr)
@@ -41,6 +41,25 @@ def build_authorize_url(
 def exchange_code_for_tokens(
     code: str, client_id: str, client_secret: str, redirect_uri: str
 ) -> dict:
+    """Exchange an OAuth2 authorization code for access and refresh tokens.
+
+    Parameters
+    ----------
+    code : str
+        The authorization code received from the Oura OAuth callback.
+    client_id : str
+        Oura application client ID.
+    client_secret : str
+        Oura application client secret.
+    redirect_uri : str
+        The redirect URI registered with the Oura application.
+
+    Returns
+    -------
+    dict
+        Token response dict including ``access_token``, ``refresh_token``,
+        and ``obtained_at`` (Unix timestamp of when the tokens were received).
+    """
     resp = requests.post(
         TOKEN_URL,
         data={
@@ -61,6 +80,23 @@ def exchange_code_for_tokens(
 def refresh_with_refresh_token(
     refresh_token: str, client_id: str, client_secret: str
 ) -> dict:
+    """Use a refresh token to obtain a new set of OAuth2 tokens.
+
+    Parameters
+    ----------
+    refresh_token : str
+        A valid Oura OAuth refresh token.
+    client_id : str
+        Oura application client ID.
+    client_secret : str
+        Oura application client secret.
+
+    Returns
+    -------
+    dict
+        Token response dict including ``access_token``, ``refresh_token``,
+        and ``obtained_at`` (Unix timestamp of when the tokens were received).
+    """
     resp = requests.post(
         TOKEN_URL,
         data={
@@ -79,8 +115,10 @@ def refresh_with_refresh_token(
 
 def save_tokens(path: str, tokens: dict) -> None:
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w") as f:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         json.dump(tokens, f, indent=2)
+    os.chmod(path, 0o600)
     print(f"Saved tokens to: {path}")
 
 

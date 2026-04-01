@@ -1,13 +1,16 @@
 import matplotlib
-matplotlib.use("Agg")  # Must be set before importing pyplot -- required for headless/serverless
+
+matplotlib.use(
+    "Agg"
+)  # Must be set before importing pyplot -- required for headless/serverless
 
 import base64
 import io
 import logging
+from datetime import date
 from typing import Optional
 
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import polars as pl
 
 logger = logging.getLogger(__name__)
@@ -28,7 +31,7 @@ COLOR_HRV: str = "#00897b"
 COLOR_HRV_AVG: str = "#e91e63"
 
 
-def _format_day_label(d) -> str:
+def _format_day_label(d: date) -> str:
     """Format a date as 'Mon 1/5' style label."""
     return d.strftime("%a %-m/%-d")
 
@@ -60,7 +63,9 @@ def _set_date_ticks(ax: plt.Axes, dates: list, labels: list) -> None:
         if (n - 1) not in tick_indices:
             tick_indices.append(n - 1)
         ax.set_xticks([dates[i] for i in tick_indices])
-        ax.set_xticklabels([labels[i] for i in tick_indices], rotation=45, ha="right", fontsize=8)
+        ax.set_xticklabels(
+            [labels[i] for i in tick_indices], rotation=45, ha="right", fontsize=8
+        )
     else:
         ax.set_xticks(dates)
         ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
@@ -129,16 +134,30 @@ def generate_daily_scores_chart(wellness_df: pl.DataFrame) -> Optional[str]:
     valid_r = [(x, v) for x, v in zip(x_positions, readiness) if v is not None]
     if valid_r:
         rx, rv = zip(*valid_r)
-        ax.plot(rx, rv, color=COLOR_READINESS, marker="o", markersize=4,
-                linewidth=1.5, label="Readiness")
+        ax.plot(
+            rx,
+            rv,
+            color=COLOR_READINESS,
+            marker="o",
+            markersize=4,
+            linewidth=1.5,
+            label="Readiness",
+        )
 
     # Plot sleep score, skipping nulls
     sleep = wellness_df["sleep_score"].to_list()
     valid_s = [(x, v) for x, v in zip(x_positions, sleep) if v is not None]
     if valid_s:
         sx, sv = zip(*valid_s)
-        ax.plot(sx, sv, color=COLOR_SLEEP, marker="o", markersize=4,
-                linewidth=1.5, label="Sleep")
+        ax.plot(
+            sx,
+            sv,
+            color=COLOR_SLEEP,
+            marker="o",
+            markersize=4,
+            linewidth=1.5,
+            label="Sleep",
+        )
 
     ax.set_ylim(0, 100)
     _set_date_ticks(ax, x_positions, labels)
@@ -191,8 +210,13 @@ def generate_steps_chart(
     for bar, alpha in zip(bars, alphas):
         bar.set_alpha(alpha)
 
-    ax.axhline(y=target_steps, color=COLOR_STEPS_TARGET, linestyle="--",
-               linewidth=1.5, label=f"Target ({target_steps:,})")
+    ax.axhline(
+        y=target_steps,
+        color=COLOR_STEPS_TARGET,
+        linestyle="--",
+        linewidth=1.5,
+        label=f"Target ({target_steps:,})",
+    )
 
     _set_date_ticks(ax, x_positions, labels)
     ax.legend(loc="upper right", fontsize=8)
@@ -232,24 +256,46 @@ def generate_sleep_stages_chart(sleep_df: pl.DataFrame) -> Optional[str]:
     x_positions = list(range(len(days)))
 
     # Convert seconds to hours
-    deep = [v / 3600 if v is not None else 0 for v in long_sleep["deep_sleep_duration"].to_list()]
-    light = [v / 3600 if v is not None else 0 for v in long_sleep["light_sleep_duration"].to_list()]
-    rem = [v / 3600 if v is not None else 0 for v in long_sleep["rem_sleep_duration"].to_list()]
-    awake = [v / 3600 if v is not None else 0 for v in long_sleep["awake_time"].to_list()]
+    deep = [
+        v / 3600 if v is not None else 0
+        for v in long_sleep["deep_sleep_duration"].to_list()
+    ]
+    light = [
+        v / 3600 if v is not None else 0
+        for v in long_sleep["light_sleep_duration"].to_list()
+    ]
+    rem = [
+        v / 3600 if v is not None else 0
+        for v in long_sleep["rem_sleep_duration"].to_list()
+    ]
+    awake = [
+        v / 3600 if v is not None else 0 for v in long_sleep["awake_time"].to_list()
+    ]
 
     fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_HEIGHT))
     _apply_chart_style(ax)
 
     ax.bar(x_positions, deep, width=0.6, color=COLOR_DEEP, label="Deep")
     bottom_light = deep
-    ax.bar(x_positions, light, width=0.6, color=COLOR_LIGHT, label="Light",
-           bottom=bottom_light)
-    bottom_rem = [d + l for d, l in zip(deep, light)]
-    ax.bar(x_positions, rem, width=0.6, color=COLOR_REM, label="REM",
-           bottom=bottom_rem)
-    bottom_awake = [d + l + r for d, l, r in zip(deep, light, rem)]
-    ax.bar(x_positions, awake, width=0.6, color=COLOR_AWAKE, label="Awake",
-           bottom=bottom_awake)
+    ax.bar(
+        x_positions,
+        light,
+        width=0.6,
+        color=COLOR_LIGHT,
+        label="Light",
+        bottom=bottom_light,
+    )
+    bottom_rem = [d + light_val for d, light_val in zip(deep, light)]
+    ax.bar(x_positions, rem, width=0.6, color=COLOR_REM, label="REM", bottom=bottom_rem)
+    bottom_awake = [d + light_val + r for d, light_val, r in zip(deep, light, rem)]
+    ax.bar(
+        x_positions,
+        awake,
+        width=0.6,
+        color=COLOR_AWAKE,
+        label="Awake",
+        bottom=bottom_awake,
+    )
 
     ax.set_ylabel("Hours", fontsize=9)
     _set_date_ticks(ax, x_positions, labels)
@@ -294,16 +340,29 @@ def generate_hrv_trend_chart(sleep_df: pl.DataFrame) -> Optional[str]:
     rolling_avg = []
     for i in range(len(hrv_values)):
         window_start = max(0, i - 2)
-        window = hrv_values[window_start:i + 1]
+        window = hrv_values[window_start : i + 1]
         rolling_avg.append(sum(window) / len(window))
 
     fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_HEIGHT))
     _apply_chart_style(ax)
 
-    ax.plot(x_positions, hrv_values, color=COLOR_HRV, marker="o", markersize=4,
-            linewidth=1.0, alpha=0.5, label="Nightly HRV")
-    ax.plot(x_positions, rolling_avg, color=COLOR_HRV_AVG, linewidth=2.0,
-            label="3-day Average")
+    ax.plot(
+        x_positions,
+        hrv_values,
+        color=COLOR_HRV,
+        marker="o",
+        markersize=4,
+        linewidth=1.0,
+        alpha=0.5,
+        label="Nightly HRV",
+    )
+    ax.plot(
+        x_positions,
+        rolling_avg,
+        color=COLOR_HRV_AVG,
+        linewidth=2.0,
+        label="3-day Average",
+    )
 
     ax.set_ylabel("HRV (ms)", fontsize=9)
     _set_date_ticks(ax, x_positions, labels)

@@ -55,10 +55,8 @@ def make_row_count_check(table: str) -> dg.AssetChecksDefinition:
         description=f"Checks that oura_raw.{table} has at least one row.",
     )
     def _check(snowflake: SnowflakeResource) -> dg.AssetCheckResult:
-        con = snowflake.get_connection()
-        result = _check_row_count(con, table)
-        con.close()
-        return result
+        with snowflake.connection() as con:
+            return _check_row_count(con, table)
 
     _check.__name__ = f"{table}_has_rows"
     _check.__qualname__ = f"{table}_has_rows"

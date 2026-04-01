@@ -23,7 +23,7 @@ class TestSESDeliveryResource:
     """Tests for SESDeliveryResource.send_report."""
 
     @patch("dagster_project.reports.report_delivery.boto3")
-    def test_sends_email_successfully(self, mock_boto3, ses_resource):
+    def test_sends_email_successfully(self, mock_boto3, ses_resource) -> None:
         """Should call SES send_email with correct parameters."""
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client
@@ -42,12 +42,19 @@ class TestSESDeliveryResource:
         assert call_kwargs["Message"]["Body"]["Html"]["Data"] == "<html>body</html>"
 
     @patch("dagster_project.reports.report_delivery.boto3")
-    def test_raises_delivery_error_on_client_error(self, mock_boto3, ses_resource):
+    def test_raises_delivery_error_on_client_error(
+        self, mock_boto3, ses_resource
+    ) -> None:
         """SES ClientError should be wrapped as DeliveryError."""
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client
         mock_client.send_email.side_effect = ClientError(
-            {"Error": {"Code": "MessageRejected", "Message": "Email address not verified"}},
+            {
+                "Error": {
+                    "Code": "MessageRejected",
+                    "Message": "Email address not verified",
+                }
+            },
             "SendEmail",
         )
 
@@ -55,7 +62,9 @@ class TestSESDeliveryResource:
             ses_resource.send_report("Subject", "<html>body</html>")
 
     @patch("dagster_project.reports.report_delivery.boto3")
-    def test_delivery_error_includes_sender_and_recipient(self, mock_boto3, ses_resource):
+    def test_delivery_error_includes_sender_and_recipient(
+        self, mock_boto3, ses_resource
+    ) -> None:
         """Error message should include sender and recipient for debugging."""
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client
@@ -68,7 +77,7 @@ class TestSESDeliveryResource:
             ses_resource.send_report("Subject", "<html></html>")
 
     @patch("dagster_project.reports.report_delivery.boto3")
-    def test_returns_message_id(self, mock_boto3, ses_resource):
+    def test_returns_message_id(self, mock_boto3, ses_resource) -> None:
         """Should return the SES MessageId for tracking."""
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client

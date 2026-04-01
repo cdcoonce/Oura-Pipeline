@@ -12,17 +12,17 @@ def translator():
 
 
 class TestGetAssetKeyForSource:
-    def test_oura_raw_source_returns_correct_asset_key(self, translator):
+    def test_oura_raw_source_returns_correct_asset_key(self, translator) -> None:
         props = {"source_name": "oura_raw", "name": "sleep"}
         result = translator.get_asset_key_for_source(props)
         assert result == dg.AssetKey(["oura_raw", "sleep"])
 
-    def test_oura_raw_source_different_table(self, translator):
+    def test_oura_raw_source_different_table(self, translator) -> None:
         props = {"source_name": "oura_raw", "name": "heartrate"}
         result = translator.get_asset_key_for_source(props)
         assert result == dg.AssetKey(["oura_raw", "heartrate"])
 
-    def test_non_oura_source_delegates_to_parent(self, translator):
+    def test_non_oura_source_delegates_to_parent(self, translator) -> None:
         """Non-oura_raw sources delegate to parent, which raises AttributeError."""
         props = {
             "source_name": "other_source",
@@ -50,19 +50,19 @@ class TestGetGroupName:
     )
     def test_model_prefix_returns_correct_group(
         self, translator, prefix, expected_group
-    ):
+    ) -> None:
         props = {"resource_type": "model", "name": f"{prefix}example"}
         assert translator.get_group_name(props) == expected_group
 
-    def test_model_without_known_prefix_returns_models(self, translator):
+    def test_model_without_known_prefix_returns_models(self, translator) -> None:
         props = {"resource_type": "model", "name": "some_random_model"}
         assert translator.get_group_name(props) == "models"
 
-    def test_model_with_empty_name_returns_models(self, translator):
+    def test_model_with_empty_name_returns_models(self, translator) -> None:
         props = {"resource_type": "model", "name": ""}
         assert translator.get_group_name(props) == "models"
 
-    def test_non_model_resource_delegates_to_parent(self, translator):
+    def test_non_model_resource_delegates_to_parent(self, translator) -> None:
         """Non-model resources delegate to parent, which returns None."""
         props = {
             "resource_type": "seed",

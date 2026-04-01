@@ -15,22 +15,22 @@ pytestmark = pytest.mark.skipif(
 
 
 class TestRowCountCheck:
-    def test_returns_checks_definition(self):
+    def test_returns_checks_definition(self) -> None:
         check = make_row_count_check("sleep")
         assert isinstance(check, dg.AssetChecksDefinition)
 
-    def test_warns_when_table_missing(self, snowflake_con):
+    def test_warns_when_table_missing(self, snowflake_con) -> None:
         result = _check_row_count(snowflake_con, "sleep")
         assert result.passed is True
         assert result.severity.name == "WARN"
 
-    def test_warns_when_table_empty(self, snowflake_con):
+    def test_warns_when_table_empty(self, snowflake_con) -> None:
         _upsert_day(snowflake_con, "sleep", [], date(2024, 6, 1))
         result = _check_row_count(snowflake_con, "sleep")
         assert result.passed is True
         assert result.severity.name == "WARN"
 
-    def test_passes_with_data(self, snowflake_con):
+    def test_passes_with_data(self, snowflake_con) -> None:
         _upsert_day(snowflake_con, "sleep", [{"id": "t1"}], date(2024, 6, 1))
         result = _check_row_count(snowflake_con, "sleep")
         assert result.passed is True

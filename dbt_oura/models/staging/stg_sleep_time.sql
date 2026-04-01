@@ -12,3 +12,4 @@ select
   raw_data:status::varchar as sleep_time_status,
   partition_date
 from src
+qualify row_number() over (partition by raw_data:day::date order by partition_date desc) = 1

@@ -49,5 +49,5 @@ def snowflake_con():
         "WHERE table_schema = 'OURA_RAW' AND table_catalog = 'OURA_TEST'"
     )
     for (table_name,) in cursor.fetchall():
-        cursor.execute(f"DROP TABLE IF EXISTS oura_raw.{table_name}")
+        cursor.execute(f'DROP TABLE IF EXISTS oura_raw."{table_name}"')
     con.close()

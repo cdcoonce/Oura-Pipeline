@@ -8,7 +8,7 @@ concurrency:
   group: ${{ github.ref }}/branch_deployments
   cancel-in-progress: true
 env:
-  DAGSTER_CLOUD_URL: "http://charles-likes-data.dagster.plus"
+  DAGSTER_CLOUD_URL: "https://charles-likes-data.dagster.plus"
   DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
   ENABLE_FAST_DEPLOYS: 'true'
   PYTHON_VERSION: '3.10'
@@ -19,7 +19,23 @@ permissions:
   pull-requests: write
 
 jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install uv && uv sync
+      - name: Run tests
+        run: uv run pytest tests/ -x --ignore=tests/test_snowflake_resource.py --ignore=tests/test_upsert_day.py --ignore=tests/test_asset_checks.py
+
   dagster_cloud_default_deploy:
+    needs: [test]
     name: Dagster Serverless Deploy
     runs-on: ubuntu-22.04
     outputs:
@@ -54,7 +70,7 @@ jobs:
         if: steps.prerun.outputs.result == 'pex-deploy'
         run: |
           cd project-repo
-          pip install dbt-core dbt-snowflake
+          pip install "dbt-core>=1.7,<2" "dbt-snowflake>=1.7,<2"
           cd dbt_oura
           dbt deps
           dbt parse --profiles-dir .

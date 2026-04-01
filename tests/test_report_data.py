@@ -23,14 +23,14 @@ def _mock_snowflake_result(data: dict) -> tuple[MagicMock, MagicMock]:
 
 
 class TestFetchWellnessForPeriod:
-    def test_returns_polars_dataframe(self):
+    def test_returns_polars_dataframe(self) -> None:
         mock_cursor, mock_con = _mock_snowflake_result(
             {"DAY": [date(2024, 6, 1)], "READINESS_SCORE": [85], "STEPS": [8000]}
         )
         result = fetch_wellness_for_period(mock_con, date(2024, 6, 1), date(2024, 6, 7))
         assert isinstance(result, pl.DataFrame)
 
-    def test_lowercases_column_names(self):
+    def test_lowercases_column_names(self) -> None:
         mock_cursor, mock_con = _mock_snowflake_result(
             {"DAY": [date(2024, 6, 1)], "READINESS_SCORE": [85]}
         )
@@ -39,21 +39,21 @@ class TestFetchWellnessForPeriod:
         assert "readiness_score" in result.columns
         assert "DAY" not in result.columns
 
-    def test_uses_parameterized_query(self):
+    def test_uses_parameterized_query(self) -> None:
         mock_cursor, mock_con = _mock_snowflake_result({"DAY": []})
         fetch_wellness_for_period(mock_con, date(2024, 6, 1), date(2024, 6, 7))
         call_args = mock_cursor.execute.call_args
         assert "%s" in call_args[0][0]
         assert date(2024, 6, 1) in call_args[0][1]
 
-    def test_empty_result_returns_empty_dataframe(self):
+    def test_empty_result_returns_empty_dataframe(self) -> None:
         mock_cursor, mock_con = _mock_snowflake_result({"DAY": [], "STEPS": []})
         result = fetch_wellness_for_period(mock_con, date(2024, 6, 1), date(2024, 6, 7))
         assert len(result) == 0
 
 
 class TestFetchSleepDetailForPeriod:
-    def test_returns_polars_dataframe(self):
+    def test_returns_polars_dataframe(self) -> None:
         mock_cursor, mock_con = _mock_snowflake_result(
             {"ID": ["s1"], "DAY": [date(2024, 6, 1)]}
         )
@@ -65,7 +65,7 @@ class TestFetchSleepDetailForPeriod:
 
 
 class TestFetchWorkoutSummaryForPeriod:
-    def test_returns_polars_dataframe(self):
+    def test_returns_polars_dataframe(self) -> None:
         mock_cursor, mock_con = _mock_snowflake_result(
             {
                 "ID": ["w1"],

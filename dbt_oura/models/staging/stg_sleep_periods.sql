@@ -6,8 +6,8 @@ with src as (
 select
   raw_data:id::varchar as id,
   raw_data:day::date as day,
-  raw_data:bedtime_start::varchar as bedtime_start,
-  raw_data:bedtime_end::varchar as bedtime_end,
+  raw_data:bedtime_start::timestamp_ntz as bedtime_start,
+  raw_data:bedtime_end::timestamp_ntz as bedtime_end,
   raw_data:type::varchar as sleep_type,
   raw_data:total_sleep_duration::int as total_sleep_duration,
   raw_data:deep_sleep_duration::int as deep_sleep_duration,
@@ -24,3 +24,4 @@ select
   raw_data:restless_periods::int as restless_periods,
   partition_date
 from src
+qualify row_number() over (partition by raw_data:id::varchar order by partition_date desc) = 1

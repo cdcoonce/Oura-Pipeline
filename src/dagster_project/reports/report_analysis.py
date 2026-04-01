@@ -126,15 +126,11 @@ _SUGGESTIONS: dict[str, str] = {
     "sleep_efficiency": (
         "Consider consistent bedtime and limiting screen time before bed"
     ),
-    "readiness_score": (
-        "Focus on recovery days and stress management techniques"
-    ),
+    "readiness_score": ("Focus on recovery days and stress management techniques"),
     "sleep_score": (
         "Prioritize sleep hygiene: dark room, cool temperature, regular schedule"
     ),
-    "avg_spo2_pct": (
-        "Monitor breathing patterns and consider consulting a physician"
-    ),
+    "avg_spo2_pct": ("Monitor breathing patterns and consider consulting a physician"),
     "steps": "Try adding a short walk after meals to increase daily movement",
     "calories": "Review activity levels and ensure adequate energy expenditure",
     "stress_high": "Incorporate relaxation practices such as meditation or deep breathing",
@@ -146,6 +142,60 @@ _SUGGESTIONS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # Functions
 # ---------------------------------------------------------------------------
+
+
+def _compute_trend(
+    first_half: pl.DataFrame,
+    second_half: pl.DataFrame,
+    metric: str,
+) -> tuple[str, float]:
+    """Compute trend direction and percentage change between two period halves.
+
+    Drops null values from each half before computing means. Returns
+    ``("stable", 0.0)`` when either half is empty or when the first-half
+    mean is zero (to avoid division by zero).
+
+    Parameters
+    ----------
+    first_half : pl.DataFrame
+        DataFrame containing the metric column for the first half of
+        the period.
+    second_half : pl.DataFrame
+        DataFrame containing the metric column for the second half of
+        the period.
+    metric : str
+        Column name of the metric to evaluate.
+
+    Returns
+    -------
+    tuple[str, float]
+        A ``(direction, pct_change)`` pair where *direction* is one of
+        ``"improving"``, ``"declining"``, or ``"stable"``, and
+        *pct_change* is the percentage change from first-half mean to
+        second-half mean.
+    """
+    first_vals = first_half.select(pl.col(metric).drop_nulls())
+    second_vals = second_half.select(pl.col(metric).drop_nulls())
+
+    if first_vals.is_empty() or second_vals.is_empty():
+        return "stable", 0.0
+
+    first_mean = float(first_vals[metric].mean())  # type: ignore[arg-type]
+    second_mean = float(second_vals[metric].mean())  # type: ignore[arg-type]
+
+    if first_mean == 0:
+        return "stable", 0.0
+
+    pct_change = ((second_mean - first_mean) / first_mean) * 100.0
+
+    if pct_change > TREND_THRESHOLD_PCT:
+        direction = "improving"
+    elif pct_change < -TREND_THRESHOLD_PCT:
+        direction = "declining"
+    else:
+        direction = "stable"
+
+    return direction, pct_change
 
 
 def compute_metric_summaries(
@@ -200,27 +250,7 @@ def compute_metric_summaries(
         max_val = float(col.max())  # type: ignore[arg-type]
 
         # Trend detection
-        first_vals = first_half.select(pl.col(metric).drop_nulls())
-        second_vals = second_half.select(pl.col(metric).drop_nulls())
-
-        if first_vals.is_empty() or second_vals.is_empty():
-            trend_direction = "stable"
-            trend_pct = 0.0
-        else:
-            first_mean = float(first_vals[metric].mean())  # type: ignore[arg-type]
-            second_mean = float(second_vals[metric].mean())  # type: ignore[arg-type]
-
-            if first_mean == 0:
-                trend_pct = 0.0
-            else:
-                trend_pct = ((second_mean - first_mean) / first_mean) * 100.0
-
-            if trend_pct > TREND_THRESHOLD_PCT:
-                trend_direction = "improving"
-            elif trend_pct < -TREND_THRESHOLD_PCT:
-                trend_direction = "declining"
-            else:
-                trend_direction = "stable"
+        trend_direction, trend_pct = _compute_trend(first_half, second_half, metric)
 
         summaries.append(
             MetricSummary(
@@ -348,7 +378,9 @@ def identify_areas_to_improve(
             continue
         avg = float(non_null[metric].mean())  # type: ignore[arg-type]
         if avg < threshold:
-            suggestion = _SUGGESTIONS.get(metric, "Review this metric with your health provider")
+            suggestion = _SUGGESTIONS.get(
+                metric, "Review this metric with your health provider"
+            )
             areas[metric] = AreaToImprove(
                 metric=metric,
                 reason=f"Below target of {threshold}",
@@ -367,27 +399,13 @@ def identify_areas_to_improve(
             first_half = wellness_df.filter(pl.col("day") <= midpoint)
             second_half = wellness_df.filter(pl.col("day") > midpoint)
 
-            all_metrics_to_check = list(WELLNESS_METRICS)
-
-            for metric in all_metrics_to_check:
+            for metric in WELLNESS_METRICS:
                 if metric in areas:
                     continue  # threshold already takes precedence
                 if metric not in wellness_df.columns:
                     continue
 
-                first_vals = first_half.select(pl.col(metric).drop_nulls())
-                second_vals = second_half.select(pl.col(metric).drop_nulls())
-
-                if first_vals.is_empty() or second_vals.is_empty():
-                    continue
-
-                first_mean = float(first_vals[metric].mean())  # type: ignore[arg-type]
-                second_mean = float(second_vals[metric].mean())  # type: ignore[arg-type]
-
-                if first_mean == 0:
-                    continue
-
-                pct_change = ((second_mean - first_mean) / first_mean) * 100.0
+                _, pct_change = _compute_trend(first_half, second_half, metric)
 
                 if pct_change < -DECLINE_ALERT_PCT:
                     avg = float(
@@ -506,8 +524,7 @@ def build_workout_summary(workout_df: pl.DataFrame) -> WorkoutSummary | None:
         .sort("workout_activity")
     )
     by_activity: dict[str, int] = {
-        row["workout_activity"]: row["count"]
-        for row in activity_counts.to_dicts()
+        row["workout_activity"]: row["count"] for row in activity_counts.to_dicts()
     }
 
     return WorkoutSummary(

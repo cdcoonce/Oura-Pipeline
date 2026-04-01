@@ -35,3 +35,10 @@ class TestReportSchedules:
 
     def test_monthly_report_runs_after_daily_job(self) -> None:
         assert monthly_report_schedule.cron_schedule == "0 17 1 * *"
+
+    def test_report_schedules_default_stopped(self) -> None:
+        """Both report schedules should start in STOPPED state."""
+        assert weekly_report_schedule.default_status == dg.DefaultScheduleStatus.STOPPED
+        assert (
+            monthly_report_schedule.default_status == dg.DefaultScheduleStatus.STOPPED
+        )

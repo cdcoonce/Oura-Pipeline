@@ -1,6 +1,8 @@
+import atexit
 import base64
 import os
 import tempfile
+from collections.abc import Iterator
 
 import dagster as dg
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
@@ -22,6 +24,7 @@ def _ensure_key_file() -> None:
     SNOWFLAKE_PRIVATE_KEY stores base64-encoded PEM, but dbt-snowflake's
     private_key_path needs a file on disk. Writes once per process and
     sets SNOWFLAKE_PRIVATE_KEY_PATH for profiles.yml to reference.
+    The temp file is registered for cleanup on process exit via atexit.
     """
     if os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH"):
         return
@@ -35,10 +38,13 @@ def _ensure_key_file() -> None:
     os.write(fd, pem_bytes)
     os.close(fd)
     os.chmod(path, 0o600)
+    atexit.register(os.unlink, path)
     os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"] = path
 
 
 @dbt_assets(manifest=dbt_manifest, dagster_dbt_translator=OuraTranslator())
-def dbt_model_assets(context: dg.AssetExecutionContext, dbt: DbtCliResource):
+def dbt_model_assets(
+    context: dg.AssetExecutionContext, dbt: DbtCliResource
+) -> Iterator:
     _ensure_key_file()
     yield from dbt.cli(["build", "--no-use-colors"], context=context).stream()

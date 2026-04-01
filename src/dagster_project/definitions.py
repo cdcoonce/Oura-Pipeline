@@ -8,28 +8,22 @@ from .reports.report_delivery import SESDeliveryResource
 
 @dg.definitions
 def defs():
+    snowflake_resource = SnowflakeResource(
+        account=dg.EnvVar("SNOWFLAKE_ACCOUNT"),
+        user=dg.EnvVar("SNOWFLAKE_USER"),
+        private_key=dg.EnvVar("SNOWFLAKE_PRIVATE_KEY"),
+        warehouse=dg.EnvVar("SNOWFLAKE_WAREHOUSE"),
+        database=dg.EnvVar("SNOWFLAKE_DATABASE"),
+        role=dg.EnvVar("SNOWFLAKE_ROLE"),
+    )
     return dg.load_definitions_from_modules(
         modules=[assets, checks, dbt_assets, report_assets, schedules],
         resources={
-            "snowflake": SnowflakeResource(
-                account=dg.EnvVar("SNOWFLAKE_ACCOUNT"),
-                user=dg.EnvVar("SNOWFLAKE_USER"),
-                private_key=dg.EnvVar("SNOWFLAKE_PRIVATE_KEY"),
-                warehouse=dg.EnvVar("SNOWFLAKE_WAREHOUSE"),
-                database=dg.EnvVar("SNOWFLAKE_DATABASE"),
-                role=dg.EnvVar("SNOWFLAKE_ROLE"),
-            ),
+            "snowflake": snowflake_resource,
             "oura_api": OuraAPI(
                 client_id=dg.EnvVar("OURA_CLIENT_ID"),
                 client_secret=dg.EnvVar("OURA_CLIENT_SECRET"),
-                snowflake=SnowflakeResource(
-                    account=dg.EnvVar("SNOWFLAKE_ACCOUNT"),
-                    user=dg.EnvVar("SNOWFLAKE_USER"),
-                    private_key=dg.EnvVar("SNOWFLAKE_PRIVATE_KEY"),
-                    warehouse=dg.EnvVar("SNOWFLAKE_WAREHOUSE"),
-                    database=dg.EnvVar("SNOWFLAKE_DATABASE"),
-                    role=dg.EnvVar("SNOWFLAKE_ROLE"),
-                ),
+                snowflake=snowflake_resource,
             ),
             "dbt": DbtCliResource(
                 project_dir=dbt_assets.DBT_PROJECT_DIR,

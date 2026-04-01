@@ -13,7 +13,7 @@ pytestmark = pytest.mark.skipif(
 
 
 class TestSnowflakeResource:
-    def test_get_connection_returns_open_connection(self):
+    def test_get_connection_returns_open_connection(self) -> None:
         resource = SnowflakeResource(
             account=os.environ["SNOWFLAKE_ACCOUNT"],
             user=os.environ["SNOWFLAKE_USER"],
@@ -31,7 +31,7 @@ class TestSnowflakeResource:
         finally:
             con.close()
 
-    def test_get_connection_sets_database(self):
+    def test_get_connection_sets_database(self) -> None:
         resource = SnowflakeResource(
             account=os.environ["SNOWFLAKE_ACCOUNT"],
             user=os.environ["SNOWFLAKE_USER"],
@@ -46,11 +46,11 @@ class TestSnowflakeResource:
         finally:
             con.close()
 
-    def test_invalid_private_key_raises(self):
+    def test_invalid_private_key_raises(self) -> None:
         resource = SnowflakeResource(
             account=os.environ["SNOWFLAKE_ACCOUNT"],
             user=os.environ["SNOWFLAKE_USER"],
             private_key="not-valid-base64-pem",
         )
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             resource.get_connection()

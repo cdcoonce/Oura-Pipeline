@@ -100,8 +100,7 @@ def _generate_and_send_report(
     dg.Failure
         On DeliveryError (SES send failure) -- surfaces in Dagster UI as red run.
     """
-    con = snowflake.get_connection()
-    try:
+    with snowflake.connection() as con:
         # 1. Fetch data
         context.log.info(
             "Fetching data for %s: %s to %s", period_type, start_date, end_date
@@ -178,8 +177,6 @@ def _generate_and_send_report(
                 "sleep_rows": dg.MetadataValue.int(len(sleep_df)),
             }
         )
-    finally:
-        con.close()
 
 
 @dg.asset(

@@ -11,3 +11,4 @@ select
   raw_data:contributors:stress::float as stress_score,
   partition_date
 from src
+qualify row_number() over (partition by raw_data:day::date order by partition_date desc) = 1

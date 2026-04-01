@@ -9,3 +9,4 @@ select
   raw_data:breathing_disturbance_index::float as breathing_disturbance_index,
   partition_date
 from src
+qualify row_number() over (partition by raw_data:day::date order by partition_date desc) = 1

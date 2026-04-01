@@ -1,7 +1,7 @@
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import date, datetime
-from typing import Any, Callable, Dict
+from typing import Any
 
 import dagster as dg
 import snowflake.connector
@@ -37,7 +37,7 @@ VALID_TABLES = frozenset(
 def _upsert_day(
     con: snowflake.connector.SnowflakeConnection,
     table: str,
-    rows: Iterable[Dict[str, Any]] | None,
+    rows: Iterable[dict[str, Any]] | None,
     day: date,
 ) -> int:
     """
@@ -101,7 +101,7 @@ def _upsert_day(
 # ---------------------------------------------------------------------------
 
 
-def _make_daily_asset(kind: str) -> Callable:
+def _make_daily_asset(kind: str) -> Callable[..., dg.MaterializeResult]:
     """Factory for daily summary assets that use OuraAPI.fetch_daily."""
 
     @dg.asset(
@@ -115,24 +115,25 @@ def _make_daily_asset(kind: str) -> Callable:
         oura_api: OuraAPI,
         snowflake: SnowflakeResource,
     ) -> dg.MaterializeResult:
-        con = snowflake.get_connection()
-        day = _day(context)
-        rows = oura_api.fetch_daily(kind, day, day)
-        count = _upsert_day(con, kind, rows, day)
-        con.close()
-        return dg.MaterializeResult(
-            metadata={
-                "dagster/row_count": dg.MetadataValue.int(count),
-                "partition_date": dg.MetadataValue.text(str(day)),
-            }
-        )
+        with snowflake.connection() as con:
+            day = _day(context)
+            rows = oura_api.fetch_daily(kind, day, day)
+            count = _upsert_day(con, kind, rows, day)
+            return dg.MaterializeResult(
+                metadata={
+                    "dagster/row_count": dg.MetadataValue.int(count),
+                    "partition_date": dg.MetadataValue.text(str(day)),
+                }
+            )
 
     _asset.__name__ = f"oura_{kind}_raw"
     _asset.__qualname__ = f"oura_{kind}_raw"
     return _asset
 
 
-def _make_granular_asset(table: str, fetch_method: str) -> Callable:
+def _make_granular_asset(
+    table: str, fetch_method: str
+) -> Callable[..., dg.MaterializeResult]:
     """Factory for granular/event-level assets that use a specific fetch method."""
 
     @dg.asset(
@@ -146,17 +147,16 @@ def _make_granular_asset(table: str, fetch_method: str) -> Callable:
         oura_api: OuraAPI,
         snowflake: SnowflakeResource,
     ) -> dg.MaterializeResult:
-        con = snowflake.get_connection()
-        day = _day(context)
-        rows = getattr(oura_api, fetch_method)(day, day)
-        count = _upsert_day(con, table, rows, day)
-        con.close()
-        return dg.MaterializeResult(
-            metadata={
-                "dagster/row_count": dg.MetadataValue.int(count),
-                "partition_date": dg.MetadataValue.text(str(day)),
-            }
-        )
+        with snowflake.connection() as con:
+            day = _day(context)
+            rows = getattr(oura_api, fetch_method)(day, day)
+            count = _upsert_day(con, table, rows, day)
+            return dg.MaterializeResult(
+                metadata={
+                    "dagster/row_count": dg.MetadataValue.int(count),
+                    "partition_date": dg.MetadataValue.text(str(day)),
+                }
+            )
 
     _asset.__name__ = f"oura_{table}_raw"
     _asset.__qualname__ = f"oura_{table}_raw"

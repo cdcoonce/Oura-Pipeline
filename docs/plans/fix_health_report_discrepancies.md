@@ -34,8 +34,22 @@ All staging models joined by fact_daily_wellness should have `unique` on `day`:
 - stg_stress: has unique on `day` ✓
 - stg_resilience: has unique on `day` ✓
 
-## Out of Scope (operational)
+### 4. Filter date spine to core metrics only
+
+The date spine was built from ALL 6 staging tables, including stress and resilience
+which were backfilled further back than sleep/activity/readiness. This created 8 days
+(Mar 3-9) with only stress data and NULLs for all core metrics.
+
+Fix: Restrict the date spine to only sleep, activity, and readiness. SpO2, stress,
+and resilience data is still joined in via LEFT JOINs for days that have core data.
+
+Investigation found this is an ingestion start date mismatch, not missing ring data:
+- stress: backfilled from 2026-03-03
+- activity: from 2026-03-10
+- sleep/readiness/spo2: from 2026-03-11
+- resilience: from 2026-03-21
+
+## Operational (not code fixes)
 
 - Running `dbt run` to rebuild tables (resolves current duplicates)
-- Investigating March 3-9 data gap (likely ring not worn)
-- Investigating workout ingestion 4-day lag
+- Backfill workout asset for Mar 28-30 (4-day lag behind other assets)

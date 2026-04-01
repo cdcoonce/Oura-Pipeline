@@ -14,12 +14,6 @@ date_spine as (
   select day from activity
   union
   select day from readiness
-  union
-  select day from spo2
-  union
-  select day from stress
-  union
-  select day from resilience
 )
 
 select

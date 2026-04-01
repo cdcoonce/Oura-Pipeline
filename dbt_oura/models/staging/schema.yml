@@ -9,7 +9,7 @@ models:
         tests: [not_null, unique]
       - name: day
         description: Calendar date of the sleep summary.
-        tests: [not_null]
+        tests: [not_null, unique]
       - name: partition_date
         description: Date the record was loaded into the raw layer.
         tests: [not_null]

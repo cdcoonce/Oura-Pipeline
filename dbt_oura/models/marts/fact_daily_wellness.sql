@@ -45,3 +45,4 @@ left join activity on activity.day = date_spine.day
 left join spo2 on spo2.day = date_spine.day
 left join stress on stress.day = date_spine.day
 left join resilience on resilience.day = date_spine.day
+qualify row_number() over (partition by date_spine.day order by date_spine.day) = 1

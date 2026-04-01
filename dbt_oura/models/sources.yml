@@ -2,58 +2,102 @@ version: 2
 
 sources:
   - name: oura_raw
+    description: Raw JSON data ingested from the Oura ring REST API and landed in Snowflake.
     database: "{{ env_var('SNOWFLAKE_DATABASE', 'OURA') }}"
     schema: oura_raw
+    freshness:
+      warn_after: {count: 2, period: day}
+      error_after: {count: 7, period: day}
+    loaded_at_field: partition_date
     tables:
       - name: sleep
+        description: Raw daily sleep summary data including scores and contributor breakdowns.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: activity
+        description: Raw daily activity data including step counts and calorie totals.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: readiness
+        description: Raw daily readiness score data.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: heartrate
+        description: Raw heart rate time-series data sampled at 5-minute intervals.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: spo2
+        description: Raw nightly blood oxygen saturation data.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: stress
+        description: Raw daily stress and recovery duration data.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: resilience
+        description: Raw daily resilience assessment data with contributor scores.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: sleep_periods
+        description: Raw individual sleep period records with detailed biometric measurements.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: sleep_time
+        description: Raw optimal bedtime recommendation data.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: workouts
+        description: Raw workout session data including activity type, duration, and calories.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: sessions
+        description: Raw mindfulness and relaxation session data.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: tags
+        description: Raw user-created tag and note data.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.
       - name: rest_mode_periods
+        description: Raw rest mode period data tracking extended recovery periods.
         columns:
           - name: raw_data
+            description: Semi-structured JSON payload from the Oura API.
           - name: partition_date
+            description: Date the record was loaded into the raw layer.

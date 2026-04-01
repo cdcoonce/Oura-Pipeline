@@ -14,6 +14,7 @@ select
   raw_data:contributors:restfulness::int as restfulness_score,
   raw_data:contributors:timing::int as timing_score,
   raw_data:contributors:total_sleep::int as total_sleep_score,
-  raw_data:timestamp::varchar as timestamp,
+  raw_data:timestamp::timestamp_ntz as timestamp,
   partition_date
 from src
+qualify row_number() over (partition by raw_data:id::varchar order by partition_date desc) = 1

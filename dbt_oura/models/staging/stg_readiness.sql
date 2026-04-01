@@ -8,3 +8,4 @@ select
   raw_data:score::int as readiness_score,
   partition_date
 from src
+qualify row_number() over (partition by raw_data:day::date order by partition_date desc) = 1

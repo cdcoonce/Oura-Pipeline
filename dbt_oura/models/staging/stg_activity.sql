@@ -9,3 +9,4 @@ select
   raw_data:total_calories::int as calories,
   partition_date
 from src
+qualify row_number() over (partition by raw_data:day::date order by partition_date desc) = 1

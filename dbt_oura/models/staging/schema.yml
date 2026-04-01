@@ -2,123 +2,228 @@ version: 2
 
 models:
   - name: stg_sleep
+    description: Staged daily sleep summary scores from the Oura ring API.
     columns:
       - name: id
-        tests: [not_null]
+        description: Unique identifier for the sleep summary record.
+        tests: [not_null, unique]
       - name: day
+        description: Calendar date of the sleep summary.
         tests: [not_null]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
       - name: sleep_score
+        description: Overall sleep score calculated by Oura (0-100).
         tests: [not_null]
+      - name: timestamp
+        description: Timestamp when the sleep data was recorded.
 
   - name: stg_activity
+    description: Staged daily activity metrics from the Oura ring API.
     columns:
       - name: day
-        tests: [not_null]
+        description: Calendar date of the activity record.
+        tests: [not_null, unique]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
       - name: steps
+        description: Total step count for the day.
         tests: [not_null]
+      - name: calories
+        description: Total calories burned for the day.
 
   - name: stg_readiness
+    description: Staged daily readiness scores from the Oura ring API.
     columns:
       - name: day
-        tests: [not_null]
+        description: Calendar date of the readiness record.
+        tests: [not_null, unique]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
       - name: readiness_score
+        description: Overall readiness score calculated by Oura (0-100).
         tests: [not_null]
 
   - name: stg_heartrate
+    description: Staged heart rate readings sampled at 5-minute intervals from the Oura ring API.
     columns:
       - name: ts
+        description: Timestamp of the heart rate reading.
         tests: [not_null]
       - name: bpm
+        description: Heart rate in beats per minute.
         tests: [not_null]
+      - name: day
+        description: Calendar date derived from the reading timestamp.
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
 
   - name: stg_spo2
+    description: Staged daily blood oxygen saturation metrics from the Oura ring API.
     columns:
       - name: day
-        tests: [not_null]
+        description: Calendar date of the SpO2 reading.
+        tests: [not_null, unique]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
       - name: avg_spo2_pct
+        description: Average blood oxygen saturation percentage for the night.
         tests:
           - not_null:
               config:
                 severity: warn
+      - name: breathing_disturbance_index
+        description: Index measuring breathing irregularities during sleep.
 
   - name: stg_stress
+    description: Staged daily stress and recovery metrics from the Oura ring API.
     columns:
       - name: day
-        tests: [not_null]
+        description: Calendar date of the stress record.
+        tests: [not_null, unique]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
       - name: stress_high
+        description: Total seconds spent in high stress during the day.
         tests: [not_null]
+      - name: recovery_high
+        description: Total seconds spent in high recovery during the day.
+      - name: stress_summary
+        description: Oura-generated text summary of the day's stress pattern.
 
   - name: stg_resilience
+    description: Staged daily resilience assessments from the Oura ring API.
     columns:
       - name: day
-        tests: [not_null]
+        description: Calendar date of the resilience record.
+        tests: [not_null, unique]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
       - name: resilience_level
-        tests: [not_null]
+        description: Categorical resilience rating for the day.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['limited', 'adequate', 'solid', 'strong', 'exceptional']
 
   - name: stg_sleep_periods
+    description: Staged individual sleep period records with detailed biometrics from the Oura ring API.
     columns:
       - name: id
-        tests: [not_null]
+        description: Unique identifier for the sleep period.
+        tests: [not_null, unique]
       - name: day
+        description: Calendar date the sleep period is attributed to.
         tests: [not_null]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
       - name: sleep_type
-        tests: [not_null]
+        description: Classification of the sleep period.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['long_sleep', 'rest', 'nap', 'late_nap']
+      - name: bedtime_start
+        description: Timestamp when the sleep period began.
+      - name: bedtime_end
+        description: Timestamp when the sleep period ended.
+      - name: total_sleep_duration
+        description: Total seconds of sleep within the period.
+      - name: efficiency
+        description: Sleep efficiency percentage for the period.
 
   - name: stg_sleep_time
+    description: Staged daily optimal bedtime recommendations from the Oura ring API.
     columns:
       - name: day
-        tests: [not_null]
+        description: Calendar date of the sleep time recommendation.
+        tests: [not_null, unique]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
+      - name: sleep_recommendation
+        description: Oura-generated sleep recommendation for the day.
+      - name: optimal_bedtime_start_offset
+        description: Recommended bedtime start as seconds offset from midnight.
+      - name: optimal_bedtime_end_offset
+        description: Recommended bedtime end as seconds offset from midnight.
 
   - name: stg_workouts
+    description: Staged workout session records from the Oura ring API.
     columns:
       - name: id
-        tests: [not_null]
+        description: Unique identifier for the workout.
+        tests: [not_null, unique]
       - name: day
+        description: Calendar date of the workout.
         tests: [not_null]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
       - name: workout_activity
+        description: Type of workout activity performed.
         tests: [not_null]
+      - name: start_datetime
+        description: Timestamp when the workout started.
+      - name: end_datetime
+        description: Timestamp when the workout ended.
+      - name: intensity
+        description: Workout intensity level.
 
   - name: stg_sessions
+    description: Staged mindfulness and relaxation session records from the Oura ring API.
     columns:
       - name: id
-        tests: [not_null]
+        description: Unique identifier for the session.
+        tests: [not_null, unique]
       - name: day
+        description: Calendar date of the session.
         tests: [not_null]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
+      - name: session_type
+        description: Type of guided session completed.
+      - name: mood
+        description: User-reported mood after the session.
 
   - name: stg_tags
+    description: Staged user-created tags and notes from the Oura ring API.
     columns:
       - name: id
-        tests: [not_null]
+        description: Unique identifier for the tag entry.
+        tests: [not_null, unique]
       - name: day
+        description: Calendar date the tag was created.
         tests: [not_null]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
+      - name: tagged_at
+        description: Timestamp when the tag was created.
+      - name: note_text
+        description: Free-text note associated with the tag.
+      - name: tags
+        description: Comma-separated list of tag labels.
 
   - name: stg_rest_mode_periods
+    description: Staged rest mode period records from the Oura ring API.
     columns:
       - name: id
-        tests: [not_null]
+        description: Unique identifier for the rest mode period.
+        tests: [not_null, unique]
       - name: partition_date
+        description: Date the record was loaded into the raw layer.
         tests: [not_null]
+      - name: start_day
+        description: Calendar date when rest mode began.
+      - name: end_day
+        description: Calendar date when rest mode ended.

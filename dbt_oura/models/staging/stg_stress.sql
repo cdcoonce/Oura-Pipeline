@@ -10,3 +10,4 @@ select
   raw_data:day_summary::varchar as stress_summary,
   partition_date
 from src
+qualify row_number() over (partition by raw_data:day::date order by partition_date desc) = 1

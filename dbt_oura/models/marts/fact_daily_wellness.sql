@@ -2,17 +2,31 @@
 
 with
 sleep as (select * from {{ ref('stg_sleep') }}),
-act   as (select * from {{ ref('stg_activity') }}),
-ready as (select * from {{ ref('stg_readiness') }}),
-spo2  as (select * from {{ ref('stg_spo2') }}),
+activity as (select * from {{ ref('stg_activity') }}),
+readiness as (select * from {{ ref('stg_readiness') }}),
+spo2 as (select * from {{ ref('stg_spo2') }}),
 stress as (select * from {{ ref('stg_stress') }}),
-res   as (select * from {{ ref('stg_resilience') }})
+resilience as (select * from {{ ref('stg_resilience') }}),
+
+date_spine as (
+  select day from sleep
+  union
+  select day from activity
+  union
+  select day from readiness
+  union
+  select day from spo2
+  union
+  select day from stress
+  union
+  select day from resilience
+)
 
 select
-  coalesce(sleep.day, act.day, ready.day, spo2.day, stress.day, res.day) as day,
-  ready.readiness_score,
-  act.steps,
-  act.calories,
+  date_spine.day,
+  readiness.readiness_score,
+  activity.steps,
+  activity.calories,
   sleep.sleep_score,
   sleep.efficiency_score as sleep_efficiency,
   spo2.avg_spo2_pct,
@@ -20,13 +34,14 @@ select
   stress.stress_high,
   stress.recovery_high,
   stress.stress_summary,
-  res.resilience_level,
-  res.sleep_recovery_score,
-  res.daytime_recovery_score,
-  res.stress_score as resilience_stress_score
-from ready
-full outer join sleep  on sleep.day  = ready.day
-full outer join act    on act.day    = ready.day
-full outer join spo2   on spo2.day   = coalesce(sleep.day, act.day, ready.day)
-full outer join stress on stress.day = coalesce(sleep.day, act.day, ready.day)
-full outer join res    on res.day    = coalesce(sleep.day, act.day, ready.day)
+  resilience.resilience_level,
+  resilience.sleep_recovery_score,
+  resilience.daytime_recovery_score,
+  resilience.stress_score as resilience_stress_score
+from date_spine
+left join readiness on readiness.day = date_spine.day
+left join sleep on sleep.day = date_spine.day
+left join activity on activity.day = date_spine.day
+left join spo2 on spo2.day = date_spine.day
+left join stress on stress.day = date_spine.day
+left join resilience on resilience.day = date_spine.day

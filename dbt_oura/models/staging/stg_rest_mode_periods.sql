@@ -11,3 +11,4 @@ select
   raw_data:end_time::varchar as end_time,
   partition_date
 from src
+qualify row_number() over (partition by raw_data:id::varchar order by partition_date desc) = 1

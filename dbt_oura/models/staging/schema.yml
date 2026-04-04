@@ -130,7 +130,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['long_sleep', 'rest', 'nap', 'late_nap']
+              values: ['long_sleep', 'sleep', 'rest', 'nap', 'late_nap']
       - name: bedtime_start
         description: Timestamp when the sleep period began.
       - name: bedtime_end

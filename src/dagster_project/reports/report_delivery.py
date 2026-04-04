@@ -45,7 +45,7 @@ class SESDeliveryResource(dg.ConfigurableResource):
             Wraps botocore.exceptions.ClientError with actionable message.
             Includes the original error code and message from SES.
         """
-        client = boto3.client("ses", region_name=self.aws_region)
+        client = boto3.client("ses", region_name=self.aws_region.strip())
         try:
             response = client.send_email(
                 Source=self.sender_email,

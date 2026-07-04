@@ -224,6 +224,9 @@ data/raw/*.parquet
 .dagster/
 .tmp*
 
+# Local launchd schedule logs (scripts/run_scheduled.py, launchd agents)
+logs/
+
 # Snowflake
 snowflake_key.p8
 snowflake_key.pub

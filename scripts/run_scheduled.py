@@ -157,6 +157,30 @@ def main() -> int:
     with open(log_path, "a", buffering=1, encoding="utf-8") as log:
         emit(f"START job={args.job} partition={yesterday} dagster_home={os.environ['DAGSTER_HOME']}", log)
         emit(f"log_file={log_path}", log)
+
+        # Pre-step: regenerate the dbt manifest before Dagster loads its defs.
+        # dbt_assets.py builds the asset graph from dbt_oura/target/manifest.json,
+        # but that file is gitignored and only auto-refreshed under `dagster dev`
+        # (prepare_if_dev). On this unattended launchd/CLI path it is NOT
+        # regenerated, so a manifest left stale by an old `dagster dev` session
+        # (or absent on a fresh checkout) makes dagster-dbt raise while mapping a
+        # runtime dbt event to an asset it never loaded -- surfacing only as an
+        # opaque "generator ignored GeneratorExit" mid-run. `dbt parse` rebuilds
+        # the manifest with no warehouse connection; abort if it fails. (It also
+        # warms the uv venv before the first step.)
+        emit("PRE-STEP: regenerating dbt manifest (dbt parse)", log)
+        parse = subprocess.run(
+            [uv, "run", "dbt", "parse",
+             "--project-dir", "dbt_oura", "--profiles-dir", "dbt_oura"],
+            cwd=REPO,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+        log.flush()
+        if parse.returncode != 0:
+            emit(f"PRE-STEP FAILED (dbt parse, exit {parse.returncode})", log)
+            return parse.returncode
+
         for i, step in enumerate(steps, start=1):
             resolved = [part.format(partition=yesterday) for part in step]
             # Invoke via ``python -m dagster`` (not the ``dagster`` console

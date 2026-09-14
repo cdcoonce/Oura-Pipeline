@@ -124,7 +124,8 @@ class OuraAPI(dg.ConfigurableResource):
             if row is None:
                 raise FileNotFoundError(
                     "No OAuth tokens found in OURA.CONFIG.OAUTH_TOKENS. "
-                    "Seed tokens using the setup SQL from Phase 0."
+                    "Run 'uv run python src/oura_oauth_cli.py' to authorize "
+                    "in a browser; it writes tokens to this table."
                 )
             token_data = row[0]
             if isinstance(token_data, str):
@@ -182,8 +183,9 @@ class OuraAPI(dg.ConfigurableResource):
                 f"OAuth token refresh failed ({resp.status_code}): "
                 f"{resp.text}. "
                 "The refresh token is likely expired or revoked. "
-                "Re-run 'uv run python src/oura_oauth_cli.py' to get new "
-                "tokens and re-seed them into OURA.CONFIG.OAUTH_TOKENS."
+                "Re-authorize with 'uv run python src/oura_oauth_cli.py' "
+                "(browser consent); it writes fresh tokens directly to "
+                "OURA.CONFIG.OAUTH_TOKENS."
             )
         refreshed_tokens = resp.json()
         refreshed_tokens["obtained_at"] = int(time.time())

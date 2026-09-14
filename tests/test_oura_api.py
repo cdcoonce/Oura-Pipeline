@@ -72,8 +72,10 @@ class TestLoadTokens:
 
         api = _make_api(mock_con)
 
-        with pytest.raises(FileNotFoundError, match="No OAuth tokens"):
+        with pytest.raises(FileNotFoundError, match="No OAuth tokens") as exc:
             api._load_tokens()
+        assert "oura_oauth_cli.py" in str(exc.value)
+        assert "Phase 0" not in str(exc.value)
 
 
 class TestSaveTokens:
@@ -157,8 +159,13 @@ class TestGetAccessToken:
         api = _make_api()
         api._load_tokens = MagicMock(return_value=old_tokens)
 
-        with pytest.raises(RuntimeError, match="refresh token is likely expired"):
+        with pytest.raises(
+            RuntimeError, match="refresh token is likely expired"
+        ) as exc:
             api._get_access_token()
+        # The CLI now writes to Snowflake itself; no manual re-seed step exists.
+        assert "oura_oauth_cli.py" in str(exc.value)
+        assert "re-seed" not in str(exc.value)
 
 
 class TestGetHttpErrorHandling:

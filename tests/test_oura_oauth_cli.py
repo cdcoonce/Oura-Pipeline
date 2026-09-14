@@ -251,3 +251,31 @@ class TestConfigValidatedBeforeBrowser:
 
         browser.assert_not_called()
         token_post.assert_not_called()
+
+    def test_unreachable_snowflake_exits_before_authorization(
+        self, cli_env, browser, token_post, mocker
+    ) -> None:
+        mocker.patch(
+            "dagster_project.defs.resources.snowflake.connector.connect",
+            side_effect=RuntimeError("network down"),
+        )
+
+        with pytest.raises(SystemExit) as exc:
+            oura_oauth_cli.main()
+
+        assert exc.value.code not in (0, None)
+        browser.assert_not_called()
+        token_post.assert_not_called()
+
+
+class TestIncompleteTokenResponse:
+    def test_missing_refresh_token_stores_nothing(
+        self, cli_env, fake_sf, browser, token_post
+    ) -> None:
+        token_post.return_value.json.side_effect = lambda: {"access_token": ACCESS}
+
+        with pytest.raises(SystemExit) as exc:
+            oura_oauth_cli.main()
+
+        assert exc.value.code not in (0, None)
+        assert not [s for s in fake_sf.statements if "INSERT" in s.upper()]

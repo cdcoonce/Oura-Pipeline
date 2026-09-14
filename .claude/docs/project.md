@@ -31,7 +31,7 @@ src/
       dbt_translator.py     # Maps dbt sources/models to Dagster asset keys + groups
     reports/
       report_data.py        # Snowflake queries for report generation
-  oura_oauth_cli.py         # Standalone OAuth2 CLI for initial token acquisition
+  oura_oauth_cli.py         # OAuth2 CLI: browser consent → writes tokens to CONFIG.OAUTH_TOKENS (also re-auth)
 dbt_oura/
   dbt_project.yml           # dbt project config (profile: oura_snowflake)
   profiles.yml              # Snowflake connection profile (key-pair auth)

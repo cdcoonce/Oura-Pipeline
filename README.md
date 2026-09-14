@@ -175,6 +175,7 @@ sequenceDiagram
     CLI->>Oura: Exchange code for tokens
     Oura->>CLI: access_token + refresh_token
     CLI->>SF: Save tokens to OAUTH_TOKENS table
+    CLI->>SF: Read back newest row, verify refresh token
 
     Note over CLI,SF: Subsequent pipeline runs
     CLI->>SF: Load tokens
@@ -278,7 +279,9 @@ base64 < rsa_key.p8 | tr -d '\n'
 uv run python src/oura_oauth_cli.py
 ```
 
-This opens your browser for Oura authorization, captures the callback, and saves tokens to the `OURA.CONFIG.OAUTH_TOKENS` table in Snowflake. Tokens auto-refresh on subsequent pipeline runs — you only need to run the CLI once.
+This opens your browser for Oura authorization, captures the callback, writes tokens to the `OURA.CONFIG.OAUTH_TOKENS` table in Snowflake, and reads the row back to verify. It uses the same `SNOWFLAKE_*` variables as the pipeline and checks them before opening the browser. Tokens auto-refresh on subsequent pipeline runs — re-run the CLI only when the grant is expired or revoked (e.g. `invalid_grant`).
+
+Run it on a machine with a browser (the callback binds `127.0.0.1`); because tokens land in Snowflake, nothing needs copying to the Dagster host. No local token file is written unless you pass `--token-file PATH`. Never refresh from such a file: Oura refresh tokens are single-use and the pipeline rotates them in Snowflake, so a saved one is almost always already spent.
 
 ### Installation
 
@@ -428,12 +431,13 @@ Reports require the `SES_SENDER_EMAIL`, `SES_RECIPIENT_EMAIL`, and `AWS_REGION` 
 
 | Symptom                                      | Likely Cause                             | Fix                                                                              |
 | -------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------- |
-| `FileNotFoundError: Token file not found`    | OAuth tokens not yet seeded in Snowflake | Run `uv run python src/oura_oauth_cli.py` to authorize and store tokens          |
+| `FileNotFoundError: No OAuth tokens found`   | OAuth tokens not yet stored in Snowflake | Run `uv run python src/oura_oauth_cli.py` to authorize and store tokens          |
+| `invalid_grant: Token already used or revoked` | Refresh token spent or grant revoked   | Re-run the OAuth CLI (fresh browser consent); it writes straight to Snowflake    |
 | `401 Unauthorized` from Oura API             | Access token expired and refresh failed  | Re-run the OAuth CLI to re-authorize                                             |
 | `dbt source freshness` warnings              | Raw tables haven't been materialized yet | Materialize the `oura_raw_daily` asset group in Dagster first                    |
 | Snowflake `oura_raw` schema missing          | First run — schema hasn't been created   | Run the Snowflake setup SQL from the [Getting Started](#snowflake-setup) section |
 | `ModuleNotFoundError: dagster_project`       | Package not installed in editable mode   | Run `uv sync` from the project root                                              |
-| Browser doesn't open during OAuth CLI        | Headless / remote environment            | Copy the printed URL manually into a browser                                     |
+| Browser doesn't open during OAuth CLI        | Headless / remote environment            | Run the CLI on a machine with a browser (tokens go to Snowflake), or paste the printed URL and then the `code` |
 | Heartrate asset hangs or times out           | Too many rows for per-row INSERT         | Verify `_upsert_day()` is using temp table batching (default in current code)    |
 | `InsufficientDataError` in report generation | Fewer than 2 days of data for the period | Backfill more days of raw data before running reports                            |
 

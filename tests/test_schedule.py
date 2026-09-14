@@ -11,8 +11,13 @@ from dagster_project.defs.schedules import (
 
 
 class TestDailyOuraSchedule:
-    def test_schedule_runs_at_9am_mst(self) -> None:
-        assert daily_oura_schedule.hour_of_day == 16
+    def test_schedule_runs_at_6am_phoenix(self) -> None:
+        # This schedule is unresolved until Definitions are built (the asset
+        # selection's partitions_def isn't known yet), so hour/minute are all
+        # that's available here. Its timezone comes from the job's
+        # DailyPartitionsDefinition(timezone="America/Phoenix") in assets.py
+        # and is verified once resolved (see definitions load check).
+        assert daily_oura_schedule.hour_of_day == 6
         assert daily_oura_schedule.minute_of_hour == 0
 
     def test_schedule_targets_correct_job(self) -> None:
@@ -31,10 +36,12 @@ class TestDailyOuraSchedule:
 
 class TestReportSchedules:
     def test_weekly_report_runs_after_daily_job(self) -> None:
-        assert weekly_report_schedule.cron_schedule == "0 17 * * 1"
+        assert weekly_report_schedule.cron_schedule == "30 6 * * 1"
+        assert weekly_report_schedule.execution_timezone == "America/Phoenix"
 
     def test_monthly_report_runs_after_daily_job(self) -> None:
-        assert monthly_report_schedule.cron_schedule == "0 17 1 * *"
+        assert monthly_report_schedule.cron_schedule == "0 7 1 * *"
+        assert monthly_report_schedule.execution_timezone == "America/Phoenix"
 
     def test_report_schedules_default_stopped(self) -> None:
         """Both report schedules should start in STOPPED state."""

@@ -15,8 +15,12 @@ daily_oura_job = dg.define_asset_job(
 
 daily_oura_schedule = dg.build_schedule_from_partitioned_job(
     job=daily_oura_job,
-    hour_of_day=16,
+    hour_of_day=6,
     minute_of_hour=0,
+    # execution_timezone is inherited from the job's DailyPartitionsDefinition
+    # (America/Phoenix, set in assets.py) — build_schedule_from_partitioned_job
+    # rejects an explicit cron_schedule/execution_timezone for a time-partitioned
+    # job, since it derives the cron schedule from the partitions definition.
 )
 
 weekly_report_job = dg.define_asset_job(
@@ -31,12 +35,14 @@ monthly_report_job = dg.define_asset_job(
 
 weekly_report_schedule = dg.ScheduleDefinition(
     job=weekly_report_job,
-    cron_schedule="0 17 * * 1",  # Monday 10 AM MST (after daily job)
+    cron_schedule="30 6 * * 1",  # Monday 6:30 AM Phoenix (after daily job)
+    execution_timezone="America/Phoenix",
     default_status=dg.DefaultScheduleStatus.STOPPED,
 )
 
 monthly_report_schedule = dg.ScheduleDefinition(
     job=monthly_report_job,
-    cron_schedule="0 17 1 * *",  # 1st of month 10 AM MST (after daily job)
+    cron_schedule="0 7 1 * *",  # 1st of month 7:00 AM Phoenix (after daily job)
+    execution_timezone="America/Phoenix",
     default_status=dg.DefaultScheduleStatus.STOPPED,
 )

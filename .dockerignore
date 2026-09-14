@@ -1,0 +1,39 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python virtual envs / caches
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+ipynb_checkpoints
+
+# Secrets — never let these into a build context
+.env
+.env.*
+!.env.example
+*.p8
+*.pub
+*.pem
+
+# Local data / runtime state
+data/
+.dagster/
+logs/
+
+# dbt build artifacts (regenerated in-image via `dbt parse`)
+dbt_oura/target/
+dbt_oura/logs/
+dbt_oura/dbt_packages/
+
+# Docs / editor / misc
+docs/
+.claude
+.vscode
+.idea
+*.md
+!README.md

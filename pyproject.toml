@@ -16,7 +16,7 @@ dependencies = [
   "dbt-snowflake>=1.7",
   "snowflake-connector-python[pandas]>=3.6",
   "cryptography>=42.0",
-  "polars>=0.20",
+  "polars[rtcompat]>=0.20",
   "requests>=2.31",
   "python-dotenv>=1.0",
   "pyarrow>=21.0.0",
@@ -28,6 +28,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.4", "pytest-mock>=3.12", "ruff>=0.4", "mypy>=1.8", "ipykernel>=6.29"]
+deploy = ["dagster-postgres==0.28.19", "dagster-docker==0.28.19"]
 
 [tool.hatch.build.targets.wheel]
 # src-layout: include both packages in the wheel

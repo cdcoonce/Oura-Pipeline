@@ -30,6 +30,13 @@ dependencies = [
 dev = ["pytest>=7.4", "pytest-mock>=3.12", "ruff>=0.4", "mypy>=1.8", "ipykernel>=6.29"]
 deploy = ["dagster-postgres==0.28.19", "dagster-docker==0.28.19"]
 
+[tool.uv]
+# SQLAlchemy 2.1 makes psycopg (v3) the default driver for a bare postgresql://
+# URL. dagster-postgres builds exactly that URL but ships psycopg2-binary, so
+# upgrading breaks Postgres instance storage (cdcoonce/rammingspeed#2). Cap
+# until dagster-postgres is ported.
+constraint-dependencies = ["sqlalchemy<2.1"]
+
 [tool.hatch.build.targets.wheel]
 # src-layout: include both packages in the wheel
 packages = ["src/oura_client", "src/dagster_project"]
